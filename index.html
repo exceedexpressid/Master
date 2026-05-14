@@ -1,0 +1,723 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Master Admin - Exceed Express</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- React & ReactDOM -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+    <!-- Babel -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <style>
+        body { touch-action: manipulation; background-color: #0f172a; font-family: 'Segoe UI', system-ui, sans-serif; color: #f8fafc; }
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+        .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        /* Animasi Melipat */
+        @keyframes fadeInDown {
+            0% { opacity: 0; transform: translateY(-5px); }
+            100% { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fade-in-down { animation: fadeInDown 0.2s ease-out forwards; }
+    </style>
+</head>
+<body class="antialiased text-slate-200">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useMemo } = React;
+
+        const loadLocal = (key, fallback) => {
+            try { const item = localStorage.getItem(key); return item ? JSON.parse(item) : fallback; } catch (e) { return fallback; }
+        };
+
+        const formatCurrency = (amount) => {
+            return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(amount || 0);
+        };
+
+        function App() {
+            // =====================================================================
+            // URL APPS SCRIPT & APPSHEET
+            // =====================================================================
+            const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzVHojspm17WSZU42RaMtgiNWJikRfGyTlPh1FczlDJS9JL52PxX0d9RpkNJYM4g424/exec"; 
+            const APPSHEET_APP_ID = "APLIKASEXCEED-327461285";
+
+            // State User & UI
+            const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(() => loadLocal('exceed_admin_logged_in', false));
+            const [isLoadingSync, setIsLoadingSync] = useState(false);
+            const [syncMessage, setSyncMessage] = useState({ text: '', type: '' });
+            
+            const [loginUname, setLoginUname] = useState('');
+            const [loginPass, setLoginPass] = useState('');
+
+            // Data State
+            const [packages, setPackages] = useState(() => loadLocal('exceed_admin_packages', []));
+            
+            // Filter & Accordion State
+            const [startDate, setStartDate] = useState('');
+            const [endDate, setEndDate] = useState('');
+            const [globalStatusFilter, setGlobalStatusFilter] = useState('semua'); // BARU: State filter status global
+            const [activeTab, setActiveTab] = useState('olshop'); // 'olshop', 'kurir', 'profit'
+            const [expandedOlshops, setExpandedOlshops] = useState([]); // Menyimpan olshop yang sedang dibuka
+            const [olshopFilters, setOlshopFilters] = useState({}); // Menyimpan state filter untuk masing-masing olshop
+
+            // State Modal Gambar
+            const [selectedImage, setSelectedImage] = useState(null);
+
+            // Toggle Accordion Olshop
+            const toggleOlshop = (name) => {
+                setExpandedOlshops(prev => prev.includes(name) ? prev.filter(n => n !== name) : [...prev, name]);
+            };
+
+            // Save to Local Storage
+            useEffect(() => { localStorage.setItem('exceed_admin_logged_in', JSON.stringify(isAdminLoggedIn)); }, [isAdminLoggedIn]);
+            useEffect(() => { localStorage.setItem('exceed_admin_packages', JSON.stringify(packages)); }, [packages]);
+
+            // Fetch Data dari Apps Script
+            const syncData = async (isLoginAttempt = false) => {
+                setIsLoadingSync(true);
+                if(!isLoginAttempt) setSyncMessage({ text: '', type: '' });
+                
+                try {
+                    const response = await fetch(`${SCRIPT_URL}?action=getInitData&t=${new Date().getTime()}`);
+                    const result = await response.json();
+                    
+                    if (result.status === 'success') {
+                        setPackages(result.data.packages || []);
+                        if(!isLoginAttempt) {
+                            setSyncMessage({ text: 'Data berhasil diperbarui secara Real-time!', type: 'success' });
+                            setTimeout(() => setSyncMessage({ text: '', type: '' }), 3000);
+                        }
+                        return true;
+                    } else {
+                        setSyncMessage({ text: 'Gagal memuat data dari server.', type: 'error' });
+                        return false;
+                    }
+                } catch (error) {
+                    setSyncMessage({ text: 'Koneksi terputus. Cek internet Anda.', type: 'error' });
+                    return false;
+                } finally {
+                    setIsLoadingSync(false);
+                }
+            };
+
+            // Init Load
+            useEffect(() => {
+                if (isAdminLoggedIn && packages.length === 0) {
+                    syncData();
+                }
+            }, [isAdminLoggedIn]);
+
+            // Login Handler KHUSUS ADMIN
+            const handleLogin = async (e) => {
+                e.preventDefault();
+                setSyncMessage({ text: 'Memeriksa kredensial...', type: 'info' });
+
+                // HARDCODED CREDENTIALS
+                if (loginUname === 'ellyasma991' && loginPass === '082213663662') {
+                    setIsAdminLoggedIn(true);
+                    setLoginUname(''); setLoginPass('');
+                    syncData();
+                } else {
+                    setSyncMessage({ text: 'Username atau Password Salah!', type: 'error' });
+                }
+            };
+
+            const handleLogout = () => {
+                setIsAdminLoggedIn(false);
+                setPackages([]);
+            };
+
+            // ==========================================
+            // FILTER & KALKULASI LAPORAN
+            // ==========================================
+            const { filteredPkgs, olshopReport, kurirReport, globalSummary } = useMemo(() => {
+                // 1. Filter Tanggal Global
+                let pkgs = packages;
+                if (startDate || endDate) {
+                   pkgs = pkgs.filter(p => {
+                      let pDateStr = p.dateString || p.tanggal || '';
+                      if (!pDateStr) return false;
+                      let normalizedDateStr = "";
+                      try {
+                          let d = new Date(pDateStr);
+                          if (isNaN(d.getTime()) && pDateStr.includes('/')) {
+                              const parts = pDateStr.split('/');
+                              if (parts.length === 3) d = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`); 
+                          }
+                          if (!isNaN(d.getTime())) {
+                              const year = d.getFullYear();
+                              const month = String(d.getMonth() + 1).padStart(2, '0');
+                              const day = String(d.getDate()).padStart(2, '0');
+                              normalizedDateStr = `${year}-${month}-${day}`;
+                          } else {
+                              normalizedDateStr = pDateStr.split('T')[0]; 
+                          }
+                      } catch(e) {
+                          normalizedDateStr = pDateStr.split('T')[0];
+                      }
+                      const sDate = startDate ? startDate : "2000-01-01";
+                      const eDate = endDate ? endDate : "2100-01-01";
+                      return normalizedDateStr >= sDate && normalizedDateStr <= eDate;
+                   });
+                }
+
+                // 2. Filter Status Global (BARU)
+                if (globalStatusFilter !== 'semua') {
+                    pkgs = pkgs.filter(p => {
+                        let stat = String(p.status).toLowerCase().trim().replace(' ', '_');
+                        if (globalStatusFilter === 'proses') return stat === 'siap_antar' || stat === 'proses';
+                        if (globalStatusFilter === 'cancel') return stat === 'cancel' || stat === 'batal';
+                        return stat === globalStatusFilter;
+                    });
+                }
+
+                const oReport = {};
+                const kReport = {};
+                const summary = { totalProfit: 0, totalPencairanOlshop: 0, totalSetoranKurir: 0, totalPaketSukses: 0 };
+
+                pkgs.forEach(pkg => {
+                    const statusPkg = String(pkg.status).toLowerCase().trim().replace(' ', '_');
+                    const olshopName = String(pkg.olshopName || 'Tanpa Nama').toUpperCase();
+                    const kurirName = String(pkg.kurirId || 'Tanpa Kurir').split('@')[0].toUpperCase();
+                    const metode = String(pkg.metodeBayar).trim().toUpperCase();
+                    
+                    const hBarang = Number(pkg.hargaPaket) || 0;
+                    const tagihan = Number(pkg.totalTagihan) || 0;
+                    const ongkir = pkg.ongkirReal !== undefined ? Number(pkg.ongkirReal) : ((tagihan - hBarang > 0) ? (tagihan - hBarang) : 0);
+
+                    // --- INISIALISASI OLSHOP & KURIR ---
+                    if (!oReport[olshopName]) {
+                        oReport[olshopName] = { totalSukses: 0, totalProses: 0, totalPending: 0, totalCancel: 0, pencairan: 0, potongan: 0, nilaiBarang: 0, paketTerkait: [] };
+                    }
+                    if (!kReport[kurirName]) {
+                        kReport[kurirName] = { totalSukses: 0, totalProses: 0, totalPending: 0, totalCancel: 0, setoran: 0, rincianCash: 0, rincianMinusTf: 0 };
+                    }
+                    
+                    // MASUKKAN SEMUA STATUS KE DALAM RINCIAN OLSHOP (Detail Accordion)
+                    oReport[olshopName].paketTerkait.push(pkg);
+
+                    // --- HITUNG STATUS KESELURUHAN UNTUK OLSHOP ---
+                    if (statusPkg === 'sukses') oReport[olshopName].totalSukses += 1;
+                    else if (statusPkg === 'cancel' || statusPkg === 'batal') oReport[olshopName].totalCancel += 1;
+                    else if (statusPkg === 'pending') oReport[olshopName].totalPending += 1;
+                    else oReport[olshopName].totalProses += 1;
+
+                    // --- HITUNG STATUS KESELURUHAN UNTUK KURIR ---
+                    if (statusPkg === 'sukses') kReport[kurirName].totalSukses += 1;
+                    else if (statusPkg === 'cancel' || statusPkg === 'batal') kReport[kurirName].totalCancel += 1;
+                    else if (statusPkg === 'pending') kReport[kurirName].totalPending += 1;
+                    else kReport[kurirName].totalProses += 1;
+
+                    // --- KALKULASI KEUANGAN (HANYA JIKA "SUKSES") ---
+                    if (statusPkg === 'sukses') {
+                        summary.totalPaketSukses += 1;
+                        summary.totalProfit += ongkir;
+
+                        // Logika Olshop
+                        let pencairan = 0;
+                        let potongan = 0;
+                        if (metode === 'TF OLSHOP') { potongan = ongkir; pencairan = -ongkir; } 
+                        else if (metode === 'CASH' || metode === 'TF KANTOR') { pencairan = hBarang; }
+
+                        oReport[olshopName].pencairan += pencairan;
+                        if (metode === 'TF OLSHOP') oReport[olshopName].potongan += ongkir;
+                        if (metode === 'CASH' || metode === 'TF KANTOR') oReport[olshopName].nilaiBarang += hBarang;
+                        summary.totalPencairanOlshop += pencairan;
+
+                        // Logika Kurir
+                        let setoranKurir = 0;
+                        if (metode === 'TF OLSHOP') setoranKurir = -ongkir;
+                        else if (metode === 'TF KANTOR') setoranKurir = 0;
+                        else if (metode === 'CASH') setoranKurir = hBarang + ongkir;
+
+                        kReport[kurirName].setoran += setoranKurir;
+                        if (metode === 'CASH') kReport[kurirName].rincianCash += setoranKurir;
+                        if (metode === 'TF OLSHOP') kReport[kurirName].rincianMinusTf += ongkir;
+                        summary.totalSetoranKurir += setoranKurir;
+                    }
+                });
+
+                // Hapus olshop yang tidak punya paket sama sekali di rentang tanggal
+                const activeOReport = Object.keys(oReport)
+                    .filter(k => oReport[k].paketTerkait.length > 0)
+                    .reduce((obj, key) => { obj[key] = oReport[key]; return obj; }, {});
+
+                const sortedOlshop = Object.keys(activeOReport).map(k => ({ name: k, ...activeOReport[k] })).sort((a, b) => b.pencairan - a.pencairan);
+                const sortedKurir = Object.keys(kReport).map(k => ({ name: k, ...kReport[k] })).sort((a, b) => b.setoran - a.setoran);
+
+                return { filteredPkgs: pkgs, olshopReport: sortedOlshop, kurirReport: sortedKurir, globalSummary: summary };
+            }, [packages, startDate, endDate, globalStatusFilter]); // BARU: Tambahkan globalStatusFilter di dependency akhir
+
+            // Badge Status Khusus Admin (Untuk Kartu Rincian)
+            const StatusBadgeAdmin = ({ status }) => {
+                const s = String(status).toLowerCase();
+                if(s === 'sukses') return <span className="text-emerald-400 bg-emerald-900/30 px-1.5 py-0.5 rounded text-[8px] md:text-[9px] font-bold uppercase border border-emerald-800/50"><i className="fas fa-check-circle mr-1"></i>Sukses</span>;
+                if(s === 'cancel') return <span className="text-red-400 bg-red-900/30 px-1.5 py-0.5 rounded text-[8px] md:text-[9px] font-bold uppercase border border-red-800/50"><i className="fas fa-times-circle mr-1"></i>Cancel</span>;
+                if(s === 'pending') return <span className="text-orange-400 bg-orange-900/30 px-1.5 py-0.5 rounded text-[8px] md:text-[9px] font-bold uppercase border border-orange-800/50"><i className="fas fa-clock mr-1"></i>Pending</span>;
+                return <span className="text-blue-400 bg-blue-900/30 px-1.5 py-0.5 rounded text-[8px] md:text-[9px] font-bold uppercase border border-blue-800/50"><i className="fas fa-truck mr-1"></i>Proses</span>;
+            };
+
+
+            // ==========================================
+            // RENDER HALAMAN LOGIN
+            // ==========================================
+            if (!isAdminLoggedIn) {
+                return (
+                    <div className="min-h-screen flex items-center justify-center bg-[#0f172a] p-4 relative overflow-hidden">
+                        <div className="absolute top-0 left-0 w-full h-1/2 bg-gradient-to-b from-[#1e293b] to-[#0f172a]"></div>
+                        
+                        <div className="bg-[#1e293b] p-8 rounded-3xl shadow-2xl w-full max-w-sm text-center relative z-10 border border-slate-700 mt-8">
+                            <div className="w-20 h-20 bg-slate-800 rounded-2xl flex items-center justify-center mx-auto mb-4 text-[#e65c00] shadow-inner border border-slate-700">
+                                <i className="fas fa-user-shield text-4xl"></i>
+                            </div>
+                            <h1 className="text-2xl font-black text-white tracking-tight">MASTER ADMIN</h1>
+                            <p className="text-sm text-slate-400 mb-8 font-medium">Otorisasi Level Tertinggi</p>
+                            
+                            <form onSubmit={handleLogin} className="space-y-4">
+                                {syncMessage.text && (
+                                    <div className={`text-xs py-3 px-3 rounded-xl font-bold flex items-start text-left ${syncMessage.type === 'error' ? 'bg-red-900/50 text-red-400 border border-red-800' : 'bg-blue-900/50 text-blue-400 border border-blue-800'}`}>
+                                        <i className={`fas ${syncMessage.type === 'error' ? 'fa-exclamation-triangle' : 'fa-spinner fa-spin'} mr-2 mt-0.5`}></i>
+                                        <span>{syncMessage.text}</span>
+                                    </div>
+                                )}
+
+                                <div className="relative">
+                                    <i className="fas fa-user absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-500"></i>
+                                    <input type="text" required value={loginUname} onChange={(e) => setLoginUname(e.target.value)} placeholder="Username Admin" className="w-full pl-12 pr-4 py-3.5 bg-slate-800 border border-slate-700 rounded-xl text-sm outline-none focus:border-[#e65c00] text-white transition-all font-medium placeholder-slate-500" disabled={isLoadingSync} />
+                                </div>
+                                
+                                <div className="relative">
+                                    <i className="fas fa-lock absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-500"></i>
+                                    <input type="password" required value={loginPass} onChange={(e) => setLoginPass(e.target.value)} placeholder="Password/Kode Unik" className="w-full pl-12 pr-4 py-3.5 bg-slate-800 border border-slate-700 rounded-xl text-sm outline-none focus:border-[#e65c00] text-white transition-all font-medium placeholder-slate-500" disabled={isLoadingSync} />
+                                </div>
+
+                                <button type="submit" disabled={isLoadingSync} className={`w-full text-white font-bold py-3.5 rounded-xl shadow-lg transition-all transform active:scale-95 flex justify-center items-center mt-2 ${isLoadingSync ? 'bg-slate-600 cursor-not-allowed shadow-none' : 'bg-[#e65c00] hover:bg-[#cc5200] shadow-[#e65c00]/20'}`}>
+                                    {isLoadingSync ? <><i className="fas fa-sync-alt animate-spin mr-2"></i> Memproses...</> : 'Buka Dashboard Master'}
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                );
+            }
+
+            // ==========================================
+            // RENDER DASHBOARD ADMIN
+            // ==========================================
+            return (
+                <div className="min-h-screen bg-[#0f172a] font-sans w-full md:max-w-4xl lg:max-w-6xl xl:max-w-7xl mx-auto shadow-2xl relative flex flex-col">
+                    
+                    {/* Header Administrator */}
+                    <header className="bg-[#1e293b] px-4 py-3 md:py-4 shadow-md z-10 sticky top-0 flex justify-between items-center border-b border-slate-700">
+                        <div className="flex items-center">
+                            <div className="w-8 h-8 md:w-10 md:h-10 bg-[#e65c00] rounded-lg flex items-center justify-center mr-3 text-white shadow-sm">
+                                <i className="fas fa-crown text-sm md:text-base"></i>
+                            </div>
+                            <div>
+                                <p className="text-[9px] md:text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-0.5">EXCEED EXPRESS</p>
+                                <h1 className="text-sm md:text-lg lg:text-xl font-black text-white leading-none truncate">MASTER DASHBOARD</h1>
+                            </div>
+                        </div>
+                        <button onClick={handleLogout} className="text-[10px] md:text-xs font-bold text-slate-300 hover:text-white bg-slate-800 hover:bg-red-500 border border-slate-600 px-3 py-1.5 rounded-lg transition-colors flex items-center shadow-sm">
+                            <span className="hidden md:inline mr-2">Tutup Sesi</span> <i className="fas fa-power-off"></i>
+                        </button>
+                    </header>
+
+                    <div className="flex-1 overflow-y-auto p-3 md:p-5 lg:p-6 space-y-4 md:space-y-6 pb-10">
+                        
+                        {/* Area 1: Filter Tanggal, Status Global & Tombol Refresh */}
+                        <div className="bg-[#1e293b] p-3 md:p-4 rounded-xl shadow-sm border border-slate-700 flex flex-col space-y-3">
+                            <div className="flex flex-col md:flex-row justify-between items-center gap-3 w-full">
+                                <div className="flex flex-col md:flex-row items-center gap-2 w-full md:w-auto">
+                                    <div className="relative w-full md:w-40">
+                                        <i className="fas fa-calendar absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 text-[10px] md:text-xs"></i>
+                                        <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="w-full pl-8 pr-2 py-2 bg-slate-800 border border-slate-600 rounded-lg text-[10px] md:text-xs outline-none focus:border-[#e65c00] text-slate-200" />
+                                    </div>
+                                    <span className="hidden md:block text-[10px] font-bold text-slate-500">Hingga</span>
+                                    <div className="relative w-full md:w-40">
+                                        <i className="fas fa-calendar absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 text-[10px] md:text-xs"></i>
+                                        <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="w-full pl-8 pr-2 py-2 bg-slate-800 border border-slate-600 rounded-lg text-[10px] md:text-xs outline-none focus:border-[#e65c00] text-slate-200" />
+                                    </div>
+                                    {(startDate || endDate) && (<button onClick={() => { setStartDate(''); setEndDate(''); }} className="p-2 bg-slate-700 text-red-400 rounded-lg hover:bg-slate-600 w-full md:w-auto flex justify-center items-center"><i className="fas fa-times-circle"></i></button>)}
+                                </div>
+                                
+                                <button onClick={() => syncData()} disabled={isLoadingSync} className={`w-full md:w-auto flex items-center justify-center bg-[#e65c00] hover:bg-[#cc5200] px-4 py-2 rounded-lg transition-all ${isLoadingSync ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                                    <i className={`fas fa-sync-alt text-white mr-2 text-[10px] md:text-xs ${isLoadingSync ? 'animate-spin' : ''}`}></i>
+                                    <span className="text-white text-[10px] md:text-xs font-bold">{isLoadingSync ? 'Menarik Data Server...' : 'Sinkronisasi Data'}</span>
+                                </button>
+                            </div>
+                            
+                            {/* BARU: Tombol Filter Status Global */}
+                            <div className="flex items-center space-x-2 overflow-x-auto pb-1 scrollbar-hide w-full border-t border-slate-700/50 pt-3">
+                                <span className="text-slate-400 text-[10px] md:text-xs font-bold flex items-center mr-2 flex-shrink-0"><i className="fas fa-filter mr-1.5"></i> Status:</span>
+                                {[{id:'semua', label:'Semua'}, {id:'sukses', label:'Sukses'}, {id:'proses', label:'Proses'}, {id:'pending', label:'Pending'}, {id:'cancel', label:'Cancel'}].map(f => (
+                                    <button 
+                                        key={f.id}
+                                        onClick={() => setGlobalStatusFilter(f.id)}
+                                        className={`px-3 py-1.5 rounded-lg text-[10px] md:text-xs font-bold uppercase transition-colors whitespace-nowrap border ${globalStatusFilter === f.id ? 'bg-[#e65c00] text-white border-[#e65c00]' : 'bg-slate-800 text-slate-400 border-slate-600 hover:bg-slate-700 hover:text-slate-200'}`}
+                                    >
+                                        {f.label}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Area 2: Ringkasan Eksekutif (3 Kartu Top) */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
+                            {/* PROFIT ADMIN */}
+                            <div className="bg-gradient-to-br from-emerald-600 to-emerald-800 rounded-xl p-4 md:p-5 text-white shadow-md relative overflow-hidden">
+                                <div className="absolute -right-2 -bottom-4 opacity-20"><i className="fas fa-chart-line text-[80px]"></i></div>
+                                <p className="text-emerald-100 text-[10px] md:text-xs font-bold uppercase tracking-widest mb-1">PROFIT BERSIH (ONGKIR)</p>
+                                <h2 className="text-2xl md:text-3xl font-black mb-2">{formatCurrency(globalSummary.totalProfit)}</h2>
+                                <p className="text-[9px] md:text-[10px] text-emerald-100 flex items-center bg-black/20 w-fit px-2 py-1 rounded-md"><i className="fas fa-box-open mr-1.5"></i> {globalSummary.totalPaketSukses} Pkt Sukses Menghasilkan Uang</p>
+                            </div>
+
+                            {/* SETORAN KURIR */}
+                            <div className="bg-gradient-to-br from-blue-600 to-blue-800 rounded-xl p-4 md:p-5 text-white shadow-md relative overflow-hidden">
+                                <div className="absolute -right-2 -bottom-4 opacity-20"><i className="fas fa-motorcycle text-[80px]"></i></div>
+                                <p className="text-blue-100 text-[10px] md:text-xs font-bold uppercase tracking-widest mb-1">TOTAL UANG DI KURIR</p>
+                                <h2 className="text-2xl md:text-3xl font-black mb-2">{formatCurrency(globalSummary.totalSetoranKurir)}</h2>
+                                <p className="text-[9px] md:text-[10px] text-blue-100 flex items-center bg-black/20 w-fit px-2 py-1 rounded-md"><i className="fas fa-hand-holding-usd mr-1.5"></i> Tunai yang wajib disetor kurir</p>
+                            </div>
+
+                            {/* PENCAIRAN OLSHOP */}
+                            <div className="bg-gradient-to-br from-[#e65c00] to-red-800 rounded-xl p-4 md:p-5 text-white shadow-md relative overflow-hidden">
+                                <div className="absolute -right-2 -bottom-4 opacity-20"><i className="fas fa-store text-[80px]"></i></div>
+                                <p className="text-orange-100 text-[10px] md:text-xs font-bold uppercase tracking-widest mb-1">TOTAL HUTANG KE OLSHOP</p>
+                                <h2 className="text-2xl md:text-3xl font-black mb-2">{formatCurrency(globalSummary.totalPencairanOlshop)}</h2>
+                                <p className="text-[9px] md:text-[10px] text-orange-100 flex items-center bg-black/20 w-fit px-2 py-1 rounded-md"><i className="fas fa-money-check-alt mr-1.5"></i> Dana talangan yang wajib dicairkan</p>
+                            </div>
+                        </div>
+
+                        {/* Area 3: Navigasi Tab */}
+                        <div className="flex border-b border-slate-700 space-x-2 md:space-x-6">
+                            <button onClick={() => setActiveTab('olshop')} className={`pb-3 text-xs md:text-sm font-bold transition-colors ${activeTab === 'olshop' ? 'text-[#e65c00] border-b-2 border-[#e65c00]' : 'text-slate-400 hover:text-slate-300'}`}>
+                                <i className="fas fa-store mr-1.5"></i> Laporan Olshop
+                            </button>
+                            <button onClick={() => setActiveTab('kurir')} className={`pb-3 text-xs md:text-sm font-bold transition-colors ${activeTab === 'kurir' ? 'text-blue-500 border-b-2 border-blue-500' : 'text-slate-400 hover:text-slate-300'}`}>
+                                <i className="fas fa-motorcycle mr-1.5"></i> Laporan Kurir
+                            </button>
+                            <button onClick={() => setActiveTab('profit')} className={`pb-3 text-xs md:text-sm font-bold transition-colors ${activeTab === 'profit' ? 'text-emerald-500 border-b-2 border-emerald-500' : 'text-slate-400 hover:text-slate-300'}`}>
+                                <i className="fas fa-chart-pie mr-1.5"></i> Laporan Profit
+                            </button>
+                        </div>
+
+                        {/* TAMPILAN TAB 1: LAPORAN OLSHOP (DENGAN ACCORDION, BADGE & FILTER MINI) */}
+                        {activeTab === 'olshop' && (
+                            <div className="bg-[#1e293b] rounded-xl shadow-sm border border-slate-700 overflow-hidden">
+                                <div className="p-3 md:p-4 border-b border-slate-700 bg-slate-800/50 flex justify-between items-center">
+                                    <h3 className="font-bold text-slate-200 text-xs md:text-sm">Rekapitulasi Pencairan Olshop <span className="text-[10px] text-slate-400 font-normal ml-2">(Klik baris untuk rincian resi)</span></h3>
+                                </div>
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-left border-collapse text-xs md:text-sm min-w-[700px]">
+                                        <thead>
+                                            <tr className="bg-slate-800 border-b border-slate-700 text-slate-400 uppercase tracking-wider text-[9px] md:text-[10px]">
+                                                <th className="p-3 font-bold w-1/4">Nama Toko / Olshop</th>
+                                                <th className="p-3 font-bold text-center">Status Semua Paket</th>
+                                                <th className="p-3 font-bold text-right">Nilai Barang (Cair)</th>
+                                                <th className="p-3 font-bold text-right">Potongan Ongkir</th>
+                                                <th className="p-3 font-bold text-right text-white">Total Pencairan Bersih</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-700/50">
+                                            {olshopReport.length === 0 ? (
+                                                <tr><td colSpan="5" className="p-8 text-center text-slate-500">Tidak ada transaksi di periode ini.</td></tr>
+                                            ) : (
+                                                olshopReport.map((ol, idx) => {
+                                                    const isExpanded = expandedOlshops.includes(ol.name);
+                                                    
+                                                    // Ambil filter yang sedang aktif untuk olshop ini
+                                                    const currentFilter = olshopFilters[ol.name] || 'semua';
+                                                    
+                                                    // Saring paket yang ditampilkan di dalam rincian
+                                                    const displayedPaket = ol.paketTerkait.filter(pkg => {
+                                                        if (currentFilter === 'semua') return true;
+                                                        let stat = String(pkg.status).toLowerCase().replace(' ', '_');
+                                                        if (currentFilter === 'proses') return stat === 'siap_antar' || stat === 'proses';
+                                                        return stat === currentFilter;
+                                                    });
+                                                    
+                                                    return (
+                                                        <React.Fragment key={idx}>
+                                                            <tr 
+                                                                onClick={() => toggleOlshop(ol.name)} 
+                                                                className={`hover:bg-slate-800/50 transition-colors cursor-pointer group ${isExpanded ? 'bg-slate-800/30' : ''}`}
+                                                            >
+                                                                <td className="p-3 font-bold text-slate-200 flex items-center">
+                                                                    <div className={`w-5 h-5 rounded-full flex items-center justify-center mr-2 transition-colors ${isExpanded ? 'bg-[#e65c00] text-white' : 'bg-slate-700 text-slate-400 group-hover:text-[#e65c00]'}`}>
+                                                                        <i className={`fas fa-chevron-${isExpanded ? 'up' : 'down'} text-[10px]`}></i>
+                                                                    </div>
+                                                                    {ol.name}
+                                                                </td>
+                                                                
+                                                                {/* BARU: Lencana Status Keseluruhan */}
+                                                                <td className="p-3">
+                                                                    <div className="flex flex-wrap items-center justify-center gap-1.5">
+                                                                        <span className="bg-emerald-900/40 text-emerald-400 border border-emerald-800 px-1.5 py-0.5 rounded text-[10px] font-bold" title="Sukses"><i className="fas fa-check-circle mr-1"></i>{ol.totalSukses}</span>
+                                                                        <span className="bg-blue-900/40 text-blue-400 border border-blue-800 px-1.5 py-0.5 rounded text-[10px] font-bold" title="Proses"><i className="fas fa-truck mr-1"></i>{ol.totalProses}</span>
+                                                                        <span className="bg-orange-900/40 text-orange-400 border border-orange-800 px-1.5 py-0.5 rounded text-[10px] font-bold" title="Pending"><i className="fas fa-clock mr-1"></i>{ol.totalPending}</span>
+                                                                        <span className="bg-red-900/40 text-red-400 border border-red-800 px-1.5 py-0.5 rounded text-[10px] font-bold" title="Cancel"><i className="fas fa-times-circle mr-1"></i>{ol.totalCancel}</span>
+                                                                    </div>
+                                                                </td>
+                                                                
+                                                                <td className="p-3 text-right text-emerald-400">+{formatCurrency(ol.nilaiBarang)}</td>
+                                                                <td className="p-3 text-right text-red-400">-{formatCurrency(ol.potongan)}</td>
+                                                                <td className={`p-3 text-right font-black ${ol.pencairan >= 0 ? 'text-[#e65c00]' : 'text-red-500'}`}>{formatCurrency(ol.pencairan)}</td>
+                                                            </tr>
+                                                            
+                                                            {/* KONTEN RINCIAN PAKET JIKA DIBUKA */}
+                                                            {isExpanded && (
+                                                                <tr>
+                                                                    <td colSpan="5" className="p-0 bg-[#0f172a]/80">
+                                                                        <div className="p-3 md:p-4 border-b border-slate-700 animate-fade-in-down">
+                                                                            
+                                                                            {/* Header Rincian + Tombol Filter Mini */}
+                                                                            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 border-b border-slate-700/50 pb-3 gap-3">
+                                                                                <h4 className="text-slate-400 font-bold text-[10px] uppercase tracking-widest flex items-center"><i className="fas fa-boxes mr-2"></i>Rincian Resi: {ol.name}</h4>
+                                                                                
+                                                                                <div className="flex flex-wrap gap-1.5">
+                                                                                    {[{id:'semua', label:'Semua'}, {id:'sukses', label:'Sukses'}, {id:'proses', label:'Proses'}, {id:'pending', label:'Pending'}, {id:'cancel', label:'Cancel'}].map(f => (
+                                                                                        <button 
+                                                                                            key={f.id}
+                                                                                            onClick={(e) => {
+                                                                                                e.stopPropagation();
+                                                                                                setOlshopFilters(prev => ({...prev, [ol.name]: f.id}));
+                                                                                            }}
+                                                                                            className={`px-2.5 py-1 rounded text-[9px] font-bold uppercase transition-colors border ${currentFilter === f.id ? 'bg-[#e65c00] text-white border-[#e65c00]' : 'bg-slate-800 text-slate-400 border-slate-600 hover:bg-slate-700'}`}
+                                                                                        >
+                                                                                            {f.label}
+                                                                                        </button>
+                                                                                    ))}
+                                                                                </div>
+                                                                            </div>
+                                                                            
+                                                                            {/* Daftar Resi (Telah difilter) */}
+                                                                            {displayedPaket.length === 0 ? (
+                                                                                <div className="text-center py-6 text-slate-500 text-xs italic">Tidak ada paket dengan filter tersebut.</div>
+                                                                            ) : (
+                                                                                <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-3">
+                                                                                    {displayedPaket.map((pkg, pIdx) => {
+                                                                                        const hBarang = Number(pkg.hargaPaket) || 0;
+                                                                                        const tagihan = Number(pkg.totalTagihan) || 0;
+                                                                                        const ongkir = pkg.ongkirReal !== undefined ? Number(pkg.ongkirReal) : ((tagihan - hBarang > 0) ? (tagihan - hBarang) : 0);
+                                                                                        let displayKurir = String(pkg.kurirId || 'Tanpa Kurir').split('@')[0];
+
+                                                                                        return (
+                                                                                            <div key={pIdx} className="bg-[#1e293b] border border-slate-600/50 rounded-xl p-3 flex flex-col relative shadow-sm hover:border-slate-500 transition-colors">
+                                                                                                
+                                                                                                {/* Atas: Header Resi, Badge & Foto */}
+                                                                                                <div className="flex justify-between items-start border-b border-slate-700/50 pb-2 mb-2">
+                                                                                                    <div className="flex-1 pr-2">
+                                                                                                        <div className="flex items-center space-x-2">
+                                                                                                            <div className="text-[#e65c00] font-mono text-[10px] md:text-xs font-bold bg-orange-900/20 px-1.5 py-0.5 rounded border border-orange-800/30 inline-block">{pkg.packageId}</div>
+                                                                                                            <StatusBadgeAdmin status={pkg.status} />
+                                                                                                        </div>
+                                                                                                        <div className="text-slate-200 font-bold text-xs md:text-sm mt-1.5 truncate">{pkg.customerName}</div>
+                                                                                                        <div className="text-slate-400 text-[10px] md:text-xs flex items-center mt-0.5"><i className="fas fa-phone mr-1.5 text-slate-500"></i> {pkg.customerPhone}</div>
+                                                                                                    </div>
+                                                                                                    
+                                                                                                    <div className="flex-shrink-0">
+                                                                                                        {pkg.fotoBukti ? (
+                                                                                                            <div 
+                                                                                                                className="w-12 h-12 md:w-14 md:h-14 rounded-lg bg-slate-800 border border-slate-600 overflow-hidden cursor-pointer hover:opacity-80 transition-opacity relative group"
+                                                                                                                onClick={(e) => { e.stopPropagation(); setSelectedImage(`https://www.appsheet.com/template/gettablefileurl?appName=${APPSHEET_APP_ID}&tableName=InputPaket&fileName=${encodeURIComponent(pkg.fotoBukti)}`); }}
+                                                                                                            >
+                                                                                                                <img src={`https://www.appsheet.com/template/gettablefileurl?appName=${APPSHEET_APP_ID}&tableName=InputPaket&fileName=${encodeURIComponent(pkg.fotoBukti)}`} className="w-full h-full object-cover" />
+                                                                                                                <div className="absolute inset-0 bg-black/30 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"><i className="fas fa-search-plus text-white text-xs"></i></div>
+                                                                                                            </div>
+                                                                                                        ) : (
+                                                                                                            <div className="w-12 h-12 md:w-14 md:h-14 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-500"><i className="fas fa-image"></i></div>
+                                                                                                        )}
+                                                                                                    </div>
+                                                                                                </div>
+                                                                                                
+                                                                                                {/* Tengah: Alamat & Kurir */}
+                                                                                                <div className="space-y-1.5 text-[10px] md:text-xs mb-3">
+                                                                                                    <div className="flex items-start">
+                                                                                                        <i className="fas fa-map-marker-alt text-slate-500 mt-0.5 mr-2 w-3 text-center"></i>
+                                                                                                        <span className="text-slate-300 line-clamp-2">{pkg.address || '-'}</span>
+                                                                                                    </div>
+                                                                                                    <div className="flex items-center">
+                                                                                                        <i className="fas fa-motorcycle text-slate-500 mr-2 w-3 text-center"></i>
+                                                                                                        <span className="text-slate-300">Kurir: <span className="font-semibold text-slate-200">{displayKurir}</span></span>
+                                                                                                    </div>
+                                                                                                </div>
+                                                                                                
+                                                                                                {/* Bawah: Rincian Keuangan */}
+                                                                                                <div className="mt-auto pt-2 border-t border-slate-700/50 grid grid-cols-2 gap-2 text-[10px] md:text-xs">
+                                                                                                    <div>
+                                                                                                        <div className="text-slate-500">Metode Bayar</div>
+                                                                                                        <div className="font-bold text-slate-200">{pkg.metodeBayar || '-'}</div>
+                                                                                                    </div>
+                                                                                                    <div className="text-right">
+                                                                                                        <div className="text-slate-500">Total Tagihan</div>
+                                                                                                        <div className="font-bold text-slate-100">{formatCurrency(tagihan)}</div>
+                                                                                                    </div>
+                                                                                                    <div>
+                                                                                                        <div className="text-slate-500">Harga Paket</div>
+                                                                                                        <div className={`font-bold ${String(pkg.status).toLowerCase()==='sukses'?'text-emerald-400':'text-slate-400'}`}>{formatCurrency(hBarang)}</div>
+                                                                                                    </div>
+                                                                                                    <div className="text-right">
+                                                                                                        <div className="text-slate-500">Ongkir</div>
+                                                                                                        <div className={`font-bold ${String(pkg.status).toLowerCase()==='sukses'?'text-red-400':'text-slate-400'}`}>{formatCurrency(ongkir)}</div>
+                                                                                                    </div>
+                                                                                                </div>
+                                                                                            </div>
+                                                                                        );
+                                                                                    })}
+                                                                                </div>
+                                                                            )}
+                                                                        </div>
+                                                                    </td>
+                                                                </tr>
+                                                            )}
+                                                        </React.Fragment>
+                                                    );
+                                                })
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* TAMPILAN TAB 2: LAPORAN KURIR */}
+                        {activeTab === 'kurir' && (
+                            <div className="bg-[#1e293b] rounded-xl shadow-sm border border-slate-700 overflow-hidden">
+                                <div className="p-3 md:p-4 border-b border-slate-700 bg-slate-800/50 flex justify-between items-center">
+                                    <h3 className="font-bold text-slate-200 text-xs md:text-sm">Rekapitulasi Uang Setoran Kurir</h3>
+                                </div>
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-left border-collapse text-xs md:text-sm min-w-[700px]">
+                                        <thead>
+                                            <tr className="bg-slate-800 border-b border-slate-700 text-slate-400 uppercase tracking-wider text-[9px] md:text-[10px]">
+                                                <th className="p-3 font-bold w-1/4">Nama Kurir (ID)</th>
+                                                <th className="p-3 font-bold text-center">Status Semua Paket</th>
+                                                <th className="p-3 font-bold text-right">Uang Tunai Ditarik</th>
+                                                <th className="p-3 font-bold text-right">Minus Ongkir (TF Olshop)</th>
+                                                <th className="p-3 font-bold text-right text-white">Total Wajib Setor</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-700/50">
+                                            {kurirReport.length === 0 ? (
+                                                <tr><td colSpan="5" className="p-8 text-center text-slate-500">Tidak ada kinerja kurir di periode ini.</td></tr>
+                                            ) : (
+                                                kurirReport.map((kur, idx) => (
+                                                    <tr key={idx} className="hover:bg-slate-800/30 transition-colors">
+                                                        <td className="p-3 font-bold text-slate-200"><i className="fas fa-motorcycle text-slate-500 mr-2 text-[10px]"></i>{kur.name}</td>
+                                                        
+                                                        {/* BARU: Lencana Status Keseluruhan untuk Kurir */}
+                                                        <td className="p-3">
+                                                            <div className="flex flex-wrap items-center justify-center gap-1.5">
+                                                                <span className="bg-emerald-900/40 text-emerald-400 border border-emerald-800 px-1.5 py-0.5 rounded text-[10px] font-bold" title="Sukses"><i className="fas fa-check-circle mr-1"></i>{kur.totalSukses}</span>
+                                                                <span className="bg-blue-900/40 text-blue-400 border border-blue-800 px-1.5 py-0.5 rounded text-[10px] font-bold" title="Proses"><i className="fas fa-truck mr-1"></i>{kur.totalProses}</span>
+                                                                <span className="bg-orange-900/40 text-orange-400 border border-orange-800 px-1.5 py-0.5 rounded text-[10px] font-bold" title="Pending"><i className="fas fa-clock mr-1"></i>{kur.totalPending}</span>
+                                                                <span className="bg-red-900/40 text-red-400 border border-red-800 px-1.5 py-0.5 rounded text-[10px] font-bold" title="Cancel"><i className="fas fa-times-circle mr-1"></i>{kur.totalCancel}</span>
+                                                            </div>
+                                                        </td>
+                                                        
+                                                        <td className="p-3 text-right text-emerald-400">+{formatCurrency(kur.rincianCash)}</td>
+                                                        <td className="p-3 text-right text-red-400">-{formatCurrency(kur.rincianMinusTf)}</td>
+                                                        <td className={`p-3 text-right font-black ${kur.setoran >= 0 ? 'text-blue-400' : 'text-red-500'}`}>{formatCurrency(kur.setoran)}</td>
+                                                    </tr>
+                                                ))
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* TAMPILAN TAB 3: LAPORAN PROFIT */}
+                        {activeTab === 'profit' && (
+                            <div className="bg-[#1e293b] rounded-xl shadow-sm border border-slate-700 overflow-hidden">
+                                <div className="p-3 md:p-4 border-b border-slate-700 bg-slate-800/50 flex justify-between items-center">
+                                    <h3 className="font-bold text-slate-200 text-xs md:text-sm">Rincian Profit Per Transaksi Sukses</h3>
+                                    <span className="text-[10px] font-bold bg-emerald-900/50 text-emerald-400 px-2.5 py-1 rounded-md border border-emerald-800">Total: {formatCurrency(globalSummary.totalProfit)}</span>
+                                </div>
+                                <div className="overflow-x-auto max-h-[500px] table-scroll">
+                                    <table className="w-full text-left border-collapse text-xs md:text-sm relative">
+                                        <thead className="sticky top-0 z-10">
+                                            <tr className="bg-slate-800 border-b border-slate-700 text-slate-400 uppercase tracking-wider text-[9px] md:text-[10px]">
+                                                <th className="p-3 font-bold">Resi & Tanggal</th>
+                                                <th className="p-3 font-bold">Olshop</th>
+                                                <th className="p-3 font-bold">Kurir</th>
+                                                <th className="p-3 font-bold text-right text-emerald-400">Profit (Ongkir)</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-700/50">
+                                            {filteredPkgs.filter(p => String(p.status).toLowerCase() === 'sukses').length === 0 ? (
+                                                <tr><td colSpan="4" className="p-8 text-center text-slate-500">Belum ada paket sukses yang menghasilkan profit.</td></tr>
+                                            ) : (
+                                                filteredPkgs.filter(p => String(p.status).toLowerCase() === 'sukses').map((pkg, idx) => {
+                                                    const hBarang = Number(pkg.hargaPaket) || 0;
+                                                    const tagihan = Number(pkg.totalTagihan) || 0;
+                                                    const ongkir = pkg.ongkirReal !== undefined ? Number(pkg.ongkirReal) : ((tagihan - hBarang > 0) ? (tagihan - hBarang) : 0);
+                                                    
+                                                    let displayTgl = String(pkg.dateString || pkg.tanggal || '-');
+                                                    if (displayTgl !== '-') {
+                                                        if (displayTgl.includes('T')) displayTgl = displayTgl.split('T')[0];
+                                                        else { try { let d = new Date(displayTgl); if(!isNaN(d.getTime())) displayTgl = d.toLocaleDateString('id-ID', {day: 'numeric', month: 'short', year: '2-digit'}); } catch(e) {} }
+                                                    }
+
+                                                    return (
+                                                        <tr key={idx} className="hover:bg-slate-800/30 transition-colors">
+                                                            <td className="p-3">
+                                                                <div className="font-mono text-[#e65c00] text-[10px] md:text-xs font-bold">{pkg.packageId}</div>
+                                                                <div className="text-[9px] text-slate-500">{displayTgl}</div>
+                                                            </td>
+                                                            <td className="p-3 font-bold text-slate-300">{pkg.olshopName}</td>
+                                                            <td className="p-3 text-slate-400 text-[10px] md:text-xs">{String(pkg.kurirId || '-').split('@')[0]}</td>
+                                                            <td className="p-3 text-right font-black text-emerald-400">+{formatCurrency(ongkir)}</td>
+                                                        </tr>
+                                                    )
+                                                })
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        )}
+
+                    </div>
+
+                    {/* MODAL FOTO MEMBESAR (KHSUSUS ADMIN) */}
+                    {selectedImage && (
+                        <div 
+                            className="fixed inset-0 z-[999] flex items-center justify-center bg-black/90 backdrop-blur-sm p-4 transition-opacity"
+                            onClick={() => setSelectedImage(null)}
+                        >
+                            <div 
+                               className="relative w-full max-w-lg md:max-w-2xl flex flex-col items-center"
+                               onClick={(e) => e.stopPropagation()} 
+                            >
+                                <button 
+                                    onClick={() => setSelectedImage(null)}
+                                    className="absolute -top-14 right-0 text-white bg-red-500/80 hover:bg-red-500 w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center transition-colors shadow-xl border border-white/20"
+                                >
+                                    <i className="fas fa-times text-xl"></i>
+                                </button>
+                                <img 
+                                    src={selectedImage} 
+                                    alt="Foto Paket Membesar" 
+                                    className="w-full max-h-[85vh] object-contain rounded-2xl shadow-2xl border border-slate-700 bg-slate-900"
+                                />
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
