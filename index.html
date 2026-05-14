@@ -63,17 +63,25 @@
             // Filter & Accordion State
             const [startDate, setStartDate] = useState('');
             const [endDate, setEndDate] = useState('');
-            const [globalStatusFilter, setGlobalStatusFilter] = useState('semua'); // BARU: State filter status global
+            const [globalStatusFilter, setGlobalStatusFilter] = useState('semua');
             const [activeTab, setActiveTab] = useState('olshop'); // 'olshop', 'kurir', 'profit'
             const [expandedOlshops, setExpandedOlshops] = useState([]); // Menyimpan olshop yang sedang dibuka
             const [olshopFilters, setOlshopFilters] = useState({}); // Menyimpan state filter untuk masing-masing olshop
 
-            // State Modal Gambar
+            // State Modal Gambar & Modal Cairkan
             const [selectedImage, setSelectedImage] = useState(null);
+            const [isCairkanModalOpen, setIsCairkanModalOpen] = useState(false);
+            const [selectedOlshopToCairkan, setSelectedOlshopToCairkan] = useState(null);
+            const [isProcessingCair, setIsProcessingCair] = useState(false);
 
             // Toggle Accordion Olshop
             const toggleOlshop = (name) => {
                 setExpandedOlshops(prev => prev.includes(name) ? prev.filter(n => n !== name) : [...prev, name]);
+            };
+
+            const openCairkanModal = (olshop) => {
+                setSelectedOlshopToCairkan(olshop);
+                setIsCairkanModalOpen(true);
             };
 
             // Save to Local Storage
@@ -120,8 +128,9 @@
                 e.preventDefault();
                 setSyncMessage({ text: 'Memeriksa kredensial...', type: 'info' });
 
-                // HARDCODED CREDENTIALS
-                if (loginUname === 'ellyasma991' && loginPass === '082213663662') {
+                // HARDCODED CREDENTIALS (DITAMBAHKAN AKUN BARU)
+                if ((loginUname === 'ellyasma991' && loginPass === '082213663662') || 
+                    (loginUname === 'idypandhu' && loginPass === '082257849332')) {
                     setIsAdminLoggedIn(true);
                     setLoginUname(''); setLoginPass('');
                     syncData();
@@ -135,11 +144,44 @@
                 setPackages([]);
             };
 
+            // PROSES CAIRKAN KE SPREADSHEET
+            const handleProsesCairkan = async () => {
+                if (!selectedOlshopToCairkan || selectedOlshopToCairkan.paketBelumCairIds.length === 0) return;
+                
+                setIsProcessingCair(true);
+                setSyncMessage({ text: 'Memproses pencairan ke Server...', type: 'info' });
+                
+                try {
+                    const formData = new URLSearchParams();
+                    formData.append('action', 'cairkanPaket');
+                    formData.append('packageIds', JSON.stringify(selectedOlshopToCairkan.paketBelumCairIds));
+
+                    const response = await fetch(SCRIPT_URL, {
+                        method: 'POST',
+                        body: formData,
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (result.status === 'success') {
+                        setSyncMessage({ text: `Berhasil mencairkan ${result.updated} paket untuk ${selectedOlshopToCairkan.name}!`, type: 'success' });
+                        setIsCairkanModalOpen(false);
+                        syncData(); // Tarik data terbaru setelah diupdate
+                    } else {
+                        setSyncMessage({ text: 'Gagal memproses: ' + result.message, type: 'error' });
+                    }
+                } catch (error) {
+                    setSyncMessage({ text: 'Terjadi kesalahan jaringan.', type: 'error' });
+                } finally {
+                    setIsProcessingCair(false);
+                }
+            };
+
             // ==========================================
             // FILTER & KALKULASI LAPORAN
             // ==========================================
             const { filteredPkgs, olshopReport, kurirReport, globalSummary } = useMemo(() => {
-                // 1. Filter Tanggal Global
                 let pkgs = packages;
                 if (startDate || endDate) {
                    pkgs = pkgs.filter(p => {
@@ -157,19 +199,14 @@
                               const month = String(d.getMonth() + 1).padStart(2, '0');
                               const day = String(d.getDate()).padStart(2, '0');
                               normalizedDateStr = `${year}-${month}-${day}`;
-                          } else {
-                              normalizedDateStr = pDateStr.split('T')[0]; 
-                          }
-                      } catch(e) {
-                          normalizedDateStr = pDateStr.split('T')[0];
-                      }
+                          } else { normalizedDateStr = pDateStr.split('T')[0]; }
+                      } catch(e) { normalizedDateStr = pDateStr.split('T')[0]; }
                       const sDate = startDate ? startDate : "2000-01-01";
                       const eDate = endDate ? endDate : "2100-01-01";
                       return normalizedDateStr >= sDate && normalizedDateStr <= eDate;
                    });
                 }
 
-                // 2. Filter Status Global (BARU)
                 if (globalStatusFilter !== 'semua') {
                     pkgs = pkgs.filter(p => {
                         let stat = String(p.status).toLowerCase().trim().replace(' ', '_');
@@ -181,7 +218,7 @@
 
                 const oReport = {};
                 const kReport = {};
-                const summary = { totalProfit: 0, totalPencairanOlshop: 0, totalSetoranKurir: 0, totalPaketSukses: 0 };
+                const summary = { totalProfit: 0, totalPencairanOlshop: 0, totalHutangAktif: 0, totalSetoranKurir: 0, totalPaketSukses: 0 };
 
                 pkgs.forEach(pkg => {
                     const statusPkg = String(pkg.status).toLowerCase().trim().replace(' ', '_');
@@ -195,31 +232,35 @@
 
                     // --- INISIALISASI OLSHOP & KURIR ---
                     if (!oReport[olshopName]) {
-                        oReport[olshopName] = { totalSukses: 0, totalProses: 0, totalPending: 0, totalCancel: 0, pencairan: 0, potongan: 0, nilaiBarang: 0, paketTerkait: [] };
+                        oReport[olshopName] = { 
+                            totalSukses: 0, totalProses: 0, totalPending: 0, totalCancel: 0, 
+                            pencairan: 0, potongan: 0, nilaiBarang: 0, 
+                            nominalBelumCair: 0, paketBelumCairIds: [], // State untuk tombol cairkan
+                            paketTerkait: [] 
+                        };
                     }
                     if (!kReport[kurirName]) {
                         kReport[kurirName] = { totalSukses: 0, totalProses: 0, totalPending: 0, totalCancel: 0, setoran: 0, rincianCash: 0, rincianMinusTf: 0 };
                     }
                     
-                    // MASUKKAN SEMUA STATUS KE DALAM RINCIAN OLSHOP (Detail Accordion)
                     oReport[olshopName].paketTerkait.push(pkg);
 
-                    // --- HITUNG STATUS KESELURUHAN UNTUK OLSHOP ---
                     if (statusPkg === 'sukses') oReport[olshopName].totalSukses += 1;
                     else if (statusPkg === 'cancel' || statusPkg === 'batal') oReport[olshopName].totalCancel += 1;
                     else if (statusPkg === 'pending') oReport[olshopName].totalPending += 1;
                     else oReport[olshopName].totalProses += 1;
 
-                    // --- HITUNG STATUS KESELURUHAN UNTUK KURIR ---
                     if (statusPkg === 'sukses') kReport[kurirName].totalSukses += 1;
                     else if (statusPkg === 'cancel' || statusPkg === 'batal') kReport[kurirName].totalCancel += 1;
                     else if (statusPkg === 'pending') kReport[kurirName].totalPending += 1;
                     else kReport[kurirName].totalProses += 1;
 
-                    // --- KALKULASI KEUANGAN (HANYA JIKA "SUKSES") ---
+                    // --- KALKULASI KEUANGAN (HANYA SUKSES) ---
                     if (statusPkg === 'sukses') {
                         summary.totalPaketSukses += 1;
                         summary.totalProfit += ongkir;
+
+                        const isCair = String(pkg.statusPencairan).toLowerCase() === 'cair';
 
                         // Logika Olshop
                         let pencairan = 0;
@@ -231,6 +272,13 @@
                         if (metode === 'TF OLSHOP') oReport[olshopName].potongan += ongkir;
                         if (metode === 'CASH' || metode === 'TF KANTOR') oReport[olshopName].nilaiBarang += hBarang;
                         summary.totalPencairanOlshop += pencairan;
+
+                        // Tambahkan ke keranjang "Belum Cair" jika statusnya bukan Cair
+                        if (!isCair) {
+                            oReport[olshopName].nominalBelumCair += pencairan;
+                            oReport[olshopName].paketBelumCairIds.push(pkg.packageId);
+                            summary.totalHutangAktif += pencairan;
+                        }
 
                         // Logika Kurir
                         let setoranKurir = 0;
@@ -245,7 +293,6 @@
                     }
                 });
 
-                // Hapus olshop yang tidak punya paket sama sekali di rentang tanggal
                 const activeOReport = Object.keys(oReport)
                     .filter(k => oReport[k].paketTerkait.length > 0)
                     .reduce((obj, key) => { obj[key] = oReport[key]; return obj; }, {});
@@ -254,9 +301,8 @@
                 const sortedKurir = Object.keys(kReport).map(k => ({ name: k, ...kReport[k] })).sort((a, b) => b.setoran - a.setoran);
 
                 return { filteredPkgs: pkgs, olshopReport: sortedOlshop, kurirReport: sortedKurir, globalSummary: summary };
-            }, [packages, startDate, endDate, globalStatusFilter]); // BARU: Tambahkan globalStatusFilter di dependency akhir
+            }, [packages, startDate, endDate, globalStatusFilter]);
 
-            // Badge Status Khusus Admin (Untuk Kartu Rincian)
             const StatusBadgeAdmin = ({ status }) => {
                 const s = String(status).toLowerCase();
                 if(s === 'sukses') return <span className="text-emerald-400 bg-emerald-900/30 px-1.5 py-0.5 rounded text-[8px] md:text-[9px] font-bold uppercase border border-emerald-800/50"><i className="fas fa-check-circle mr-1"></i>Sukses</span>;
@@ -265,7 +311,6 @@
                 return <span className="text-blue-400 bg-blue-900/30 px-1.5 py-0.5 rounded text-[8px] md:text-[9px] font-bold uppercase border border-blue-800/50"><i className="fas fa-truck mr-1"></i>Proses</span>;
             };
 
-
             // ==========================================
             // RENDER HALAMAN LOGIN
             // ==========================================
@@ -273,14 +318,12 @@
                 return (
                     <div className="min-h-screen flex items-center justify-center bg-[#0f172a] p-4 relative overflow-hidden">
                         <div className="absolute top-0 left-0 w-full h-1/2 bg-gradient-to-b from-[#1e293b] to-[#0f172a]"></div>
-                        
                         <div className="bg-[#1e293b] p-8 rounded-3xl shadow-2xl w-full max-w-sm text-center relative z-10 border border-slate-700 mt-8">
                             <div className="w-20 h-20 bg-slate-800 rounded-2xl flex items-center justify-center mx-auto mb-4 text-[#e65c00] shadow-inner border border-slate-700">
                                 <i className="fas fa-user-shield text-4xl"></i>
                             </div>
                             <h1 className="text-2xl font-black text-white tracking-tight">MASTER ADMIN</h1>
                             <p className="text-sm text-slate-400 mb-8 font-medium">Otorisasi Level Tertinggi</p>
-                            
                             <form onSubmit={handleLogin} className="space-y-4">
                                 {syncMessage.text && (
                                     <div className={`text-xs py-3 px-3 rounded-xl font-bold flex items-start text-left ${syncMessage.type === 'error' ? 'bg-red-900/50 text-red-400 border border-red-800' : 'bg-blue-900/50 text-blue-400 border border-blue-800'}`}>
@@ -288,17 +331,14 @@
                                         <span>{syncMessage.text}</span>
                                     </div>
                                 )}
-
                                 <div className="relative">
                                     <i className="fas fa-user absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-500"></i>
                                     <input type="text" required value={loginUname} onChange={(e) => setLoginUname(e.target.value)} placeholder="Username Admin" className="w-full pl-12 pr-4 py-3.5 bg-slate-800 border border-slate-700 rounded-xl text-sm outline-none focus:border-[#e65c00] text-white transition-all font-medium placeholder-slate-500" disabled={isLoadingSync} />
                                 </div>
-                                
                                 <div className="relative">
                                     <i className="fas fa-lock absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-500"></i>
                                     <input type="password" required value={loginPass} onChange={(e) => setLoginPass(e.target.value)} placeholder="Password/Kode Unik" className="w-full pl-12 pr-4 py-3.5 bg-slate-800 border border-slate-700 rounded-xl text-sm outline-none focus:border-[#e65c00] text-white transition-all font-medium placeholder-slate-500" disabled={isLoadingSync} />
                                 </div>
-
                                 <button type="submit" disabled={isLoadingSync} className={`w-full text-white font-bold py-3.5 rounded-xl shadow-lg transition-all transform active:scale-95 flex justify-center items-center mt-2 ${isLoadingSync ? 'bg-slate-600 cursor-not-allowed shadow-none' : 'bg-[#e65c00] hover:bg-[#cc5200] shadow-[#e65c00]/20'}`}>
                                     {isLoadingSync ? <><i className="fas fa-sync-alt animate-spin mr-2"></i> Memproses...</> : 'Buka Dashboard Master'}
                                 </button>
@@ -313,7 +353,6 @@
             // ==========================================
             return (
                 <div className="min-h-screen bg-[#0f172a] font-sans w-full md:max-w-4xl lg:max-w-6xl xl:max-w-7xl mx-auto shadow-2xl relative flex flex-col">
-                    
                     {/* Header Administrator */}
                     <header className="bg-[#1e293b] px-4 py-3 md:py-4 shadow-md z-10 sticky top-0 flex justify-between items-center border-b border-slate-700">
                         <div className="flex items-center">
@@ -331,7 +370,6 @@
                     </header>
 
                     <div className="flex-1 overflow-y-auto p-3 md:p-5 lg:p-6 space-y-4 md:space-y-6 pb-10">
-                        
                         {/* Area 1: Filter Tanggal, Status Global & Tombol Refresh */}
                         <div className="bg-[#1e293b] p-3 md:p-4 rounded-xl shadow-sm border border-slate-700 flex flex-col space-y-3">
                             <div className="flex flex-col md:flex-row justify-between items-center gap-3 w-full">
@@ -354,7 +392,6 @@
                                 </button>
                             </div>
                             
-                            {/* BARU: Tombol Filter Status Global */}
                             <div className="flex items-center space-x-2 overflow-x-auto pb-1 scrollbar-hide w-full border-t border-slate-700/50 pt-3">
                                 <span className="text-slate-400 text-[10px] md:text-xs font-bold flex items-center mr-2 flex-shrink-0"><i className="fas fa-filter mr-1.5"></i> Status:</span>
                                 {[{id:'semua', label:'Semua'}, {id:'sukses', label:'Sukses'}, {id:'proses', label:'Proses'}, {id:'pending', label:'Pending'}, {id:'cancel', label:'Cancel'}].map(f => (
@@ -369,7 +406,7 @@
                             </div>
                         </div>
 
-                        {/* Area 2: Ringkasan Eksekutif (3 Kartu Top) */}
+                        {/* Area 2: Ringkasan Eksekutif */}
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
                             {/* PROFIT ADMIN */}
                             <div className="bg-gradient-to-br from-emerald-600 to-emerald-800 rounded-xl p-4 md:p-5 text-white shadow-md relative overflow-hidden">
@@ -387,12 +424,12 @@
                                 <p className="text-[9px] md:text-[10px] text-blue-100 flex items-center bg-black/20 w-fit px-2 py-1 rounded-md"><i className="fas fa-hand-holding-usd mr-1.5"></i> Tunai yang wajib disetor kurir</p>
                             </div>
 
-                            {/* PENCAIRAN OLSHOP */}
+                            {/* HUTANG AKTIF OLSHOP (DIUBAH) */}
                             <div className="bg-gradient-to-br from-[#e65c00] to-red-800 rounded-xl p-4 md:p-5 text-white shadow-md relative overflow-hidden">
                                 <div className="absolute -right-2 -bottom-4 opacity-20"><i className="fas fa-store text-[80px]"></i></div>
-                                <p className="text-orange-100 text-[10px] md:text-xs font-bold uppercase tracking-widest mb-1">TOTAL HUTANG KE OLSHOP</p>
-                                <h2 className="text-2xl md:text-3xl font-black mb-2">{formatCurrency(globalSummary.totalPencairanOlshop)}</h2>
-                                <p className="text-[9px] md:text-[10px] text-orange-100 flex items-center bg-black/20 w-fit px-2 py-1 rounded-md"><i className="fas fa-money-check-alt mr-1.5"></i> Dana talangan yang wajib dicairkan</p>
+                                <p className="text-orange-100 text-[10px] md:text-xs font-bold uppercase tracking-widest mb-1">TOTAL HUTANG AKTIF</p>
+                                <h2 className="text-2xl md:text-3xl font-black mb-2">{formatCurrency(globalSummary.totalHutangAktif)}</h2>
+                                <p className="text-[9px] md:text-[10px] text-orange-100 flex items-center bg-black/20 w-fit px-2 py-1 rounded-md"><i className="fas fa-money-check-alt mr-1.5"></i> Total dana yang belum dicairkan</p>
                             </div>
                         </div>
 
@@ -409,7 +446,7 @@
                             </button>
                         </div>
 
-                        {/* TAMPILAN TAB 1: LAPORAN OLSHOP (DENGAN ACCORDION, BADGE & FILTER MINI) */}
+                        {/* TAMPILAN TAB 1: LAPORAN OLSHOP (DENGAN TOMBOL CAIRKAN) */}
                         {activeTab === 'olshop' && (
                             <div className="bg-[#1e293b] rounded-xl shadow-sm border border-slate-700 overflow-hidden">
                                 <div className="p-3 md:p-4 border-b border-slate-700 bg-slate-800/50 flex justify-between items-center">
@@ -420,23 +457,21 @@
                                         <thead>
                                             <tr className="bg-slate-800 border-b border-slate-700 text-slate-400 uppercase tracking-wider text-[9px] md:text-[10px]">
                                                 <th className="p-3 font-bold w-1/4">Nama Toko / Olshop</th>
-                                                <th className="p-3 font-bold text-center">Status Semua Paket</th>
-                                                <th className="p-3 font-bold text-right">Nilai Barang (Cair)</th>
-                                                <th className="p-3 font-bold text-right">Potongan Ongkir</th>
-                                                <th className="p-3 font-bold text-right text-white">Total Pencairan Bersih</th>
+                                                <th className="p-3 font-bold text-center">Status Pkt</th>
+                                                <th className="p-3 font-bold text-right">Barang (Cair)</th>
+                                                <th className="p-3 font-bold text-right">Potong Ongkir</th>
+                                                <th className="p-3 font-bold text-right text-white">Total Bersih</th>
+                                                <th className="p-3 font-bold text-center">Aksi</th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-slate-700/50">
                                             {olshopReport.length === 0 ? (
-                                                <tr><td colSpan="5" className="p-8 text-center text-slate-500">Tidak ada transaksi di periode ini.</td></tr>
+                                                <tr><td colSpan="6" className="p-8 text-center text-slate-500">Tidak ada transaksi di periode/status ini.</td></tr>
                                             ) : (
                                                 olshopReport.map((ol, idx) => {
                                                     const isExpanded = expandedOlshops.includes(ol.name);
-                                                    
-                                                    // Ambil filter yang sedang aktif untuk olshop ini
                                                     const currentFilter = olshopFilters[ol.name] || 'semua';
                                                     
-                                                    // Saring paket yang ditampilkan di dalam rincian
                                                     const displayedPaket = ol.paketTerkait.filter(pkg => {
                                                         if (currentFilter === 'semua') return true;
                                                         let stat = String(pkg.status).toLowerCase().replace(' ', '_');
@@ -451,15 +486,14 @@
                                                                 className={`hover:bg-slate-800/50 transition-colors cursor-pointer group ${isExpanded ? 'bg-slate-800/30' : ''}`}
                                                             >
                                                                 <td className="p-3 font-bold text-slate-200 flex items-center">
-                                                                    <div className={`w-5 h-5 rounded-full flex items-center justify-center mr-2 transition-colors ${isExpanded ? 'bg-[#e65c00] text-white' : 'bg-slate-700 text-slate-400 group-hover:text-[#e65c00]'}`}>
+                                                                    <div className={`w-5 h-5 rounded-full flex items-center justify-center mr-2 transition-colors flex-shrink-0 ${isExpanded ? 'bg-[#e65c00] text-white' : 'bg-slate-700 text-slate-400 group-hover:text-[#e65c00]'}`}>
                                                                         <i className={`fas fa-chevron-${isExpanded ? 'up' : 'down'} text-[10px]`}></i>
                                                                     </div>
-                                                                    {ol.name}
+                                                                    <span className="truncate">{ol.name}</span>
                                                                 </td>
                                                                 
-                                                                {/* BARU: Lencana Status Keseluruhan */}
                                                                 <td className="p-3">
-                                                                    <div className="flex flex-wrap items-center justify-center gap-1.5">
+                                                                    <div className="flex flex-wrap items-center justify-center gap-1">
                                                                         <span className="bg-emerald-900/40 text-emerald-400 border border-emerald-800 px-1.5 py-0.5 rounded text-[10px] font-bold" title="Sukses"><i className="fas fa-check-circle mr-1"></i>{ol.totalSukses}</span>
                                                                         <span className="bg-blue-900/40 text-blue-400 border border-blue-800 px-1.5 py-0.5 rounded text-[10px] font-bold" title="Proses"><i className="fas fa-truck mr-1"></i>{ol.totalProses}</span>
                                                                         <span className="bg-orange-900/40 text-orange-400 border border-orange-800 px-1.5 py-0.5 rounded text-[10px] font-bold" title="Pending"><i className="fas fa-clock mr-1"></i>{ol.totalPending}</span>
@@ -469,16 +503,36 @@
                                                                 
                                                                 <td className="p-3 text-right text-emerald-400">+{formatCurrency(ol.nilaiBarang)}</td>
                                                                 <td className="p-3 text-right text-red-400">-{formatCurrency(ol.potongan)}</td>
-                                                                <td className={`p-3 text-right font-black ${ol.pencairan >= 0 ? 'text-[#e65c00]' : 'text-red-500'}`}>{formatCurrency(ol.pencairan)}</td>
+                                                                <td className={`p-3 text-right font-black ${ol.pencairan >= 0 ? 'text-[#e65c00]' : 'text-red-500'}`}>
+                                                                    <div className="flex flex-col items-end">
+                                                                        <span>{formatCurrency(ol.pencairan)}</span>
+                                                                        {ol.nominalBelumCair !== ol.pencairan && ol.nominalBelumCair > 0 && (
+                                                                            <span className="text-[9px] font-bold text-slate-400">Blm Cair: {formatCurrency(ol.nominalBelumCair)}</span>
+                                                                        )}
+                                                                    </div>
+                                                                </td>
+
+                                                                {/* TOMBOL AKSI CAIRKAN */}
+                                                                <td className="p-3">
+                                                                    {ol.paketBelumCairIds.length > 0 ? (
+                                                                        <button 
+                                                                            onClick={(e) => { e.stopPropagation(); openCairkanModal(ol); }}
+                                                                            className="w-full bg-emerald-500 hover:bg-emerald-600 text-white px-2 py-1.5 rounded-lg text-[10px] md:text-xs font-bold flex items-center justify-center transition-colors shadow-sm"
+                                                                        >
+                                                                            <i className="fas fa-hand-holding-usd mr-1.5"></i> Cairkan ({ol.paketBelumCairIds.length})
+                                                                        </button>
+                                                                    ) : (
+                                                                        <span className="w-full bg-slate-700/50 text-slate-400 px-2 py-1.5 rounded-lg text-[10px] md:text-xs font-bold block text-center border border-slate-600">LUNAS</span>
+                                                                    )}
+                                                                </td>
                                                             </tr>
                                                             
                                                             {/* KONTEN RINCIAN PAKET JIKA DIBUKA */}
                                                             {isExpanded && (
                                                                 <tr>
-                                                                    <td colSpan="5" className="p-0 bg-[#0f172a]/80">
+                                                                    <td colSpan="6" className="p-0 bg-[#0f172a]/80">
                                                                         <div className="p-3 md:p-4 border-b border-slate-700 animate-fade-in-down">
                                                                             
-                                                                            {/* Header Rincian + Tombol Filter Mini */}
                                                                             <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 border-b border-slate-700/50 pb-3 gap-3">
                                                                                 <h4 className="text-slate-400 font-bold text-[10px] uppercase tracking-widest flex items-center"><i className="fas fa-boxes mr-2"></i>Rincian Resi: {ol.name}</h4>
                                                                                 
@@ -498,7 +552,6 @@
                                                                                 </div>
                                                                             </div>
                                                                             
-                                                                            {/* Daftar Resi (Telah difilter) */}
                                                                             {displayedPaket.length === 0 ? (
                                                                                 <div className="text-center py-6 text-slate-500 text-xs italic">Tidak ada paket dengan filter tersebut.</div>
                                                                             ) : (
@@ -507,12 +560,12 @@
                                                                                         const hBarang = Number(pkg.hargaPaket) || 0;
                                                                                         const tagihan = Number(pkg.totalTagihan) || 0;
                                                                                         const ongkir = pkg.ongkirReal !== undefined ? Number(pkg.ongkirReal) : ((tagihan - hBarang > 0) ? (tagihan - hBarang) : 0);
+                                                                                        const isCair = String(pkg.statusPencairan).toLowerCase() === 'cair';
                                                                                         let displayKurir = String(pkg.kurirId || 'Tanpa Kurir').split('@')[0];
 
                                                                                         return (
                                                                                             <div key={pIdx} className="bg-[#1e293b] border border-slate-600/50 rounded-xl p-3 flex flex-col relative shadow-sm hover:border-slate-500 transition-colors">
                                                                                                 
-                                                                                                {/* Atas: Header Resi, Badge & Foto */}
                                                                                                 <div className="flex justify-between items-start border-b border-slate-700/50 pb-2 mb-2">
                                                                                                     <div className="flex-1 pr-2">
                                                                                                         <div className="flex items-center space-x-2">
@@ -523,7 +576,7 @@
                                                                                                         <div className="text-slate-400 text-[10px] md:text-xs flex items-center mt-0.5"><i className="fas fa-phone mr-1.5 text-slate-500"></i> {pkg.customerPhone}</div>
                                                                                                     </div>
                                                                                                     
-                                                                                                    <div className="flex-shrink-0">
+                                                                                                    <div className="flex-shrink-0 flex flex-col items-end">
                                                                                                         {pkg.fotoBukti ? (
                                                                                                             <div 
                                                                                                                 className="w-12 h-12 md:w-14 md:h-14 rounded-lg bg-slate-800 border border-slate-600 overflow-hidden cursor-pointer hover:opacity-80 transition-opacity relative group"
@@ -535,10 +588,14 @@
                                                                                                         ) : (
                                                                                                             <div className="w-12 h-12 md:w-14 md:h-14 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-500"><i className="fas fa-image"></i></div>
                                                                                                         )}
+                                                                                                        {String(pkg.status).toLowerCase() === 'sukses' && (
+                                                                                                            <span className={`mt-1.5 text-[8px] font-bold px-1.5 py-0.5 rounded border ${isCair ? 'bg-emerald-900/30 text-emerald-400 border-emerald-800/50' : 'bg-orange-900/30 text-orange-400 border-orange-800/50'}`}>
+                                                                                                                {isCair ? 'TELAH CAIR' : 'BELUM CAIR'}
+                                                                                                            </span>
+                                                                                                        )}
                                                                                                     </div>
                                                                                                 </div>
                                                                                                 
-                                                                                                {/* Tengah: Alamat & Kurir */}
                                                                                                 <div className="space-y-1.5 text-[10px] md:text-xs mb-3">
                                                                                                     <div className="flex items-start">
                                                                                                         <i className="fas fa-map-marker-alt text-slate-500 mt-0.5 mr-2 w-3 text-center"></i>
@@ -550,7 +607,6 @@
                                                                                                     </div>
                                                                                                 </div>
                                                                                                 
-                                                                                                {/* Bawah: Rincian Keuangan */}
                                                                                                 <div className="mt-auto pt-2 border-t border-slate-700/50 grid grid-cols-2 gap-2 text-[10px] md:text-xs">
                                                                                                     <div>
                                                                                                         <div className="text-slate-500">Metode Bayar</div>
@@ -607,13 +663,11 @@
                                         </thead>
                                         <tbody className="divide-y divide-slate-700/50">
                                             {kurirReport.length === 0 ? (
-                                                <tr><td colSpan="5" className="p-8 text-center text-slate-500">Tidak ada kinerja kurir di periode ini.</td></tr>
+                                                <tr><td colSpan="5" className="p-8 text-center text-slate-500">Tidak ada kinerja kurir di periode/status ini.</td></tr>
                                             ) : (
                                                 kurirReport.map((kur, idx) => (
                                                     <tr key={idx} className="hover:bg-slate-800/30 transition-colors">
                                                         <td className="p-3 font-bold text-slate-200"><i className="fas fa-motorcycle text-slate-500 mr-2 text-[10px]"></i>{kur.name}</td>
-                                                        
-                                                        {/* BARU: Lencana Status Keseluruhan untuk Kurir */}
                                                         <td className="p-3">
                                                             <div className="flex flex-wrap items-center justify-center gap-1.5">
                                                                 <span className="bg-emerald-900/40 text-emerald-400 border border-emerald-800 px-1.5 py-0.5 rounded text-[10px] font-bold" title="Sukses"><i className="fas fa-check-circle mr-1"></i>{kur.totalSukses}</span>
@@ -622,7 +676,6 @@
                                                                 <span className="bg-red-900/40 text-red-400 border border-red-800 px-1.5 py-0.5 rounded text-[10px] font-bold" title="Cancel"><i className="fas fa-times-circle mr-1"></i>{kur.totalCancel}</span>
                                                             </div>
                                                         </td>
-                                                        
                                                         <td className="p-3 text-right text-emerald-400">+{formatCurrency(kur.rincianCash)}</td>
                                                         <td className="p-3 text-right text-red-400">-{formatCurrency(kur.rincianMinusTf)}</td>
                                                         <td className={`p-3 text-right font-black ${kur.setoran >= 0 ? 'text-blue-400' : 'text-red-500'}`}>{formatCurrency(kur.setoran)}</td>
@@ -685,30 +738,66 @@
                                 </div>
                             </div>
                         )}
-
                     </div>
 
-                    {/* MODAL FOTO MEMBESAR (KHSUSUS ADMIN) */}
+                    {/* MODAL FOTO MEMBESAR */}
                     {selectedImage && (
                         <div 
                             className="fixed inset-0 z-[999] flex items-center justify-center bg-black/90 backdrop-blur-sm p-4 transition-opacity"
                             onClick={() => setSelectedImage(null)}
                         >
-                            <div 
-                               className="relative w-full max-w-lg md:max-w-2xl flex flex-col items-center"
-                               onClick={(e) => e.stopPropagation()} 
-                            >
-                                <button 
-                                    onClick={() => setSelectedImage(null)}
-                                    className="absolute -top-14 right-0 text-white bg-red-500/80 hover:bg-red-500 w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center transition-colors shadow-xl border border-white/20"
-                                >
+                            <div className="relative w-full max-w-lg md:max-w-2xl flex flex-col items-center" onClick={(e) => e.stopPropagation()}>
+                                <button onClick={() => setSelectedImage(null)} className="absolute -top-14 right-0 text-white bg-red-500/80 hover:bg-red-500 w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center transition-colors shadow-xl border border-white/20">
                                     <i className="fas fa-times text-xl"></i>
                                 </button>
-                                <img 
-                                    src={selectedImage} 
-                                    alt="Foto Paket Membesar" 
-                                    className="w-full max-h-[85vh] object-contain rounded-2xl shadow-2xl border border-slate-700 bg-slate-900"
-                                />
+                                <img src={selectedImage} alt="Foto Paket Membesar" className="w-full max-h-[85vh] object-contain rounded-2xl shadow-2xl border border-slate-700 bg-slate-900" />
+                            </div>
+                        </div>
+                    )}
+
+                    {/* MODAL CAIRKAN (BARU) */}
+                    {isCairkanModalOpen && selectedOlshopToCairkan && (
+                        <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in-down">
+                            <div className="bg-[#1e293b] rounded-2xl shadow-2xl border border-slate-700 w-full max-w-md overflow-hidden">
+                                <div className="p-4 md:p-5 border-b border-slate-700 bg-slate-800/50">
+                                    <h3 className="text-sm md:text-base font-black text-white flex items-center"><i className="fas fa-money-check-alt text-emerald-500 mr-2"></i> Konfirmasi Pencairan</h3>
+                                </div>
+                                <div className="p-4 md:p-5 space-y-4">
+                                    <p className="text-slate-300 text-xs md:text-sm">Anda akan mencairkan dana dan mengubah status di Spreadsheet untuk Olshop:</p>
+                                    <div className="bg-slate-800 p-3 md:p-4 rounded-xl border border-slate-700">
+                                        <div className="font-bold text-base md:text-lg text-white mb-1">{selectedOlshopToCairkan.name}</div>
+                                        <div className="flex justify-between items-center text-xs md:text-sm">
+                                            <span className="text-slate-400">Total Resi Diproses:</span>
+                                            <span className="font-bold text-slate-200">{selectedOlshopToCairkan.paketBelumCairIds.length} Paket</span>
+                                        </div>
+                                        <div className="flex justify-between items-center text-xs md:text-sm mt-2 pt-2 border-t border-slate-700">
+                                            <span className="text-slate-400">Total Nominal Cair:</span>
+                                            <span className={`font-black text-sm md:text-base ${selectedOlshopToCairkan.nominalBelumCair >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                                                {formatCurrency(selectedOlshopToCairkan.nominalBelumCair)}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <p className="text-[10px] md:text-xs text-yellow-400/90 bg-yellow-900/20 p-2.5 md:p-3 rounded-lg border border-yellow-700/30 flex">
+                                        <i className="fas fa-exclamation-triangle mr-2 mt-0.5"></i>
+                                        <span>Tindakan ini akan otomatis mengubah Status Pencairan <b>{selectedOlshopToCairkan.paketBelumCairIds.length} paket</b> menjadi <b>"Cair"</b> di Google Sheets.</span>
+                                    </p>
+                                </div>
+                                <div className="p-3 md:p-4 border-t border-slate-700 bg-slate-800/50 flex space-x-3">
+                                    <button 
+                                        onClick={() => setIsCairkanModalOpen(false)}
+                                        disabled={isProcessingCair}
+                                        className="flex-1 px-4 py-2 md:py-2.5 rounded-xl text-xs md:text-sm font-bold text-slate-300 bg-slate-700 hover:bg-slate-600 transition-colors"
+                                    >
+                                        Batal
+                                    </button>
+                                    <button 
+                                        onClick={handleProsesCairkan}
+                                        disabled={isProcessingCair}
+                                        className="flex-1 px-4 py-2 md:py-2.5 rounded-xl text-xs md:text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-500 transition-colors flex items-center justify-center shadow-lg shadow-emerald-900/50"
+                                    >
+                                        {isProcessingCair ? <><i className="fas fa-spinner fa-spin mr-2"></i> Memproses...</> : <><i className="fas fa-check mr-2"></i> Ya, Cairkan</>}
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     )}
