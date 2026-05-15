@@ -136,7 +136,7 @@
                 e.preventDefault();
                 setSyncMessage({ text: 'Memeriksa kredensial...', type: 'info' });
 
-                // HARDCODED CREDENTIALS 
+                // HARDCODED CREDENTIALS
                 if ((loginUname === 'ellyasma991' && loginPass === '082213663662') || 
                     (loginUname === 'idypandhu' && loginPass === '082257849332')) {
                     setIsAdminLoggedIn(true);
@@ -187,7 +187,7 @@
             };
 
             // ==========================================
-            // FILTER & KALKULASI LAPORAN
+            // FILTER & KALKULASI LAPORAN (TERIMA BERES)
             // ==========================================
             const { filteredPkgs, olshopReport, kurirReport, globalSummary } = useMemo(() => {
                 let pkgs = packages;
@@ -236,7 +236,12 @@
                     
                     const hBarang = Number(pkg.hargaPaket) || 0;
                     const tagihan = Number(pkg.totalTagihan) || 0;
-                    const ongkir = pkg.ongkirReal !== undefined ? Number(pkg.ongkirReal) : ((tagihan - hBarang > 0) ? (tagihan - hBarang) : 0);
+                    
+                    // Fallback cerdas jika ongkirReal gagal didapat dari AppSheet/Apps Script
+                    let ongkir = pkg.ongkirReal !== undefined && Number(pkg.ongkirReal) > 0 ? Number(pkg.ongkirReal) : 0;
+                    if (ongkir === 0 && tagihan > hBarang) {
+                        ongkir = tagihan - hBarang;
+                    }
 
                     // --- INISIALISASI OLSHOP & KURIR ---
                     if (!oReport[olshopName]) {
@@ -273,17 +278,20 @@
                         summary.totalPaketSukses += 1;
                         summary.totalProfit += ongkir;
                         
-                        // Catat profit per pihak
                         oReport[olshopName].profit += ongkir;
                         kReport[kurirName].profit += ongkir;
 
                         const isCair = String(pkg.statusPencairan).toLowerCase() === 'cair';
 
-                        // Logika Olshop
+                        // LOGIKA OLSHOP
                         let pencairan = 0;
                         let potongan = 0;
-                        if (metode === 'TF OLSHOP') { potongan = ongkir; pencairan = -ongkir; } 
-                        else if (metode === 'CASH' || metode === 'TF KANTOR') { pencairan = hBarang; }
+                        if (metode === 'TF OLSHOP') { 
+                            potongan = ongkir; 
+                            pencairan = -ongkir; 
+                        } else if (metode === 'CASH' || metode === 'TF KANTOR') { 
+                            pencairan = hBarang; 
+                        }
 
                         oReport[olshopName].pencairan += pencairan;
                         if (metode === 'TF OLSHOP') oReport[olshopName].potongan += ongkir;
@@ -299,15 +307,17 @@
                             summary.totalDanaCair += pencairan;
                         }
 
-                        // Logika Kurir
+                        // LOGIKA KURIR (SOP: TF Kantor Mengurangi Setoran Kurir)
                         let setoranKurir = 0;
-                        if (metode === 'TF OLSHOP') setoranKurir = -ongkir;
-                        else if (metode === 'TF KANTOR') setoranKurir = 0;
-                        else if (metode === 'CASH') setoranKurir = hBarang + ongkir;
+                        if (metode === 'TF OLSHOP' || metode === 'TF KANTOR') {
+                            setoranKurir = -ongkir; // Kurir dikurangi target setorannya karena sudah antar barang
+                        } else if (metode === 'CASH') {
+                            setoranKurir = hBarang + ongkir; // Kurir setor tunai penuh
+                        }
 
                         kReport[kurirName].setoran += setoranKurir;
                         if (metode === 'CASH') kReport[kurirName].rincianCash += setoranKurir;
-                        if (metode === 'TF OLSHOP') kReport[kurirName].rincianMinusTf += ongkir;
+                        if (metode === 'TF OLSHOP' || metode === 'TF KANTOR') kReport[kurirName].rincianMinusTf += ongkir;
                         summary.totalSetoranKurir += setoranKurir;
                     }
                 });
@@ -789,6 +799,7 @@
                                                                                                         const hBarang = Number(pkg.hargaPaket) || 0;
                                                                                                         const tagihan = Number(pkg.totalTagihan) || 0;
                                                                                                         const ongkir = pkg.ongkirReal !== undefined ? Number(pkg.ongkirReal) : ((tagihan - hBarang > 0) ? (tagihan - hBarang) : 0);
+                                                                                                        const isCair = String(pkg.statusPencairan).toLowerCase() === 'cair';
 
                                                                                                         return (
                                                                                                             <div key={pIdx} className="bg-[#1e293b] border border-slate-600/50 rounded-xl p-3 flex flex-col relative shadow-sm hover:border-slate-500 transition-colors">
@@ -814,6 +825,11 @@
                                                                                                                             </div>
                                                                                                                         ) : (
                                                                                                                             <div className="w-12 h-12 md:w-14 md:h-14 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-500"><i className="fas fa-image"></i></div>
+                                                                                                                        )}
+                                                                                                                        {String(pkg.status).toLowerCase() === 'sukses' && (
+                                                                                                                            <span className={`mt-1.5 text-[8px] font-bold px-1.5 py-0.5 rounded border ${isCair ? 'bg-emerald-900/30 text-emerald-400 border-emerald-800/50' : 'bg-orange-900/30 text-orange-400 border-orange-800/50'}`}>
+                                                                                                                                {isCair ? 'TELAH CAIR' : 'BELUM CAIR'}
+                                                                                                                            </span>
                                                                                                                         )}
                                                                                                                     </div>
                                                                                                                 </div>
@@ -866,7 +882,7 @@
                             </div>
                         )}
 
-                        {/* TAMPILAN TAB 3: LAPORAN PROFIT (DENGAN ACCORDION & TOGGLE GROUPING) */}
+                        {/* TAMPILAN TAB 3: LAPORAN PROFIT */}
                         {activeTab === 'profit' && (
                             <div className="bg-[#1e293b] rounded-xl shadow-sm border border-slate-700 overflow-hidden">
                                 <div className="p-3 md:p-4 border-b border-slate-700 bg-slate-800/50 flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
@@ -905,7 +921,6 @@
                                         </thead>
                                         <tbody className="divide-y divide-slate-700/50">
                                             {(() => {
-                                                // Pilih data berdasarkan toggle dan saring yang hanya punya profit > 0
                                                 const reportData = profitViewBy === 'olshop' ? olshopReport : kurirReport;
                                                 const filteredData = reportData.filter(item => item.profit > 0).sort((a,b) => b.profit - a.profit);
                                                 
@@ -937,7 +952,6 @@
                                                                 <td className="p-3 text-right font-black text-emerald-400 text-sm whitespace-nowrap">+{formatCurrency(item.profit)}</td>
                                                             </tr>
 
-                                                            {/* KONTEN RINCIAN PAKET PROFIT JIKA DIBUKA */}
                                                             {isExpanded && (
                                                                 <tr>
                                                                     <td colSpan="3" className="p-0 bg-[#0f172a]/80">
@@ -966,7 +980,6 @@
                                                                                                     </div>
                                                                                                     <div className="text-slate-200 font-bold text-xs md:text-sm mt-1.5 truncate">{pkg.customerName}</div>
                                                                                                     
-                                                                                                    {/* Tampilkan Info Lawan (Jika list olshop, tampilkan kurirnya. Jika list kurir, tampilkan olshopnya) */}
                                                                                                     {profitViewBy === 'olshop' ? (
                                                                                                         <div className="text-slate-400 text-[10px] md:text-xs flex items-center mt-1"><i className="fas fa-motorcycle mr-1.5 text-slate-500 w-3 text-center"></i> Kurir: <span className="font-medium text-slate-300 ml-1">{displayKurir}</span></div>
                                                                                                     ) : (
@@ -974,7 +987,6 @@
                                                                                                     )}
                                                                                                 </div>
                                                                                                 
-                                                                                                {/* Angka Profit Besar di Kanan */}
                                                                                                 <div className="flex-shrink-0 flex flex-col items-end justify-center h-full bg-emerald-900/20 p-2 rounded-lg border border-emerald-800/30">
                                                                                                     <div className="text-[9px] text-emerald-500 mb-0.5 uppercase font-bold tracking-widest">Ongkir / Profit</div>
                                                                                                     <div className="font-black text-emerald-400 text-sm md:text-base">+{formatCurrency(ongkir)}</div>
