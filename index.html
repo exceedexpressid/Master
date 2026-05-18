@@ -71,7 +71,7 @@
             const [olshopFilters, setOlshopFilters] = useState({}); 
             const [expandedKurirs, setExpandedKurirs] = useState([]); 
             const [kurirFilters, setKurirFilters] = useState({}); 
-            const [expandedKurirOlshops, setExpandedKurirOlshops] = useState([]); 
+            const [expandedKurirOlshops, setExpandedKurirOlshops] = useState([]); // Toggle Olshop dalam Kurir
             
             // State untuk Accordion & Filter Tab Profit
             const [profitViewBy, setProfitViewBy] = useState('olshop'); // 'olshop', 'kurir'
@@ -310,21 +310,23 @@
                             summary.totalDanaCair += pencairan;
                         }
 
-                        // LOGIKA KURIR YANG BARU & LENGKAP
+                        // LOGIKA KURIR (FINAL & AKURAT)
                         let setoranKurir = 0;
                         if (metode === 'TF OLSHOP') {
-                            setoranKurir = -ongkir; 
+                            // Murni info kerjaan, kurir tidak pegang uang, jadi tidak menambah setoran
                             kReport[kurirName].totalTfOlshop += hBarang;
                             kReport[kurirName].rincianMinusTf += ongkir;
                         } else if (metode === 'TF KANTOR') {
-                            setoranKurir = -ongkir; 
+                            // Murni info kerjaan, kurir tidak pegang uang, jadi tidak menambah setoran
                             kReport[kurirName].totalTfKantor += hBarang;
                             kReport[kurirName].rincianMinusTf += ongkir;
                         } else if (metode === 'CASH') {
+                            // Kurir terima uang fisik (Barang + Ongkir), jadi wajib disetor penuh
                             setoranKurir = hBarang + ongkir; 
                             kReport[kurirName].rincianCash += setoranKurir;
                         }
 
+                        // Wajib Setor hanya terisi dari perputaran CASH
                         kReport[kurirName].setoran += setoranKurir;
                         summary.totalSetoranKurir += setoranKurir;
                     }
@@ -700,7 +702,7 @@
                             </div>
                         )}
 
-                        {/* TAMPILAN TAB 2: LAPORAN KURIR (DIPERBARUI) */}
+                        {/* TAMPILAN TAB 2: LAPORAN KURIR (DIPERBARUI TOTAL) */}
                         {activeTab === 'kurir' && (
                             <div className="bg-[#1e293b] rounded-xl shadow-sm border border-slate-700 overflow-hidden">
                                 <div className="p-3 md:p-4 border-b border-slate-700 bg-slate-800/50 flex justify-between items-center">
