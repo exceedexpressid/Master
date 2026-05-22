@@ -97,6 +97,30 @@
             useEffect(() => { localStorage.setItem('exceed_admin_logged_in', JSON.stringify(isAdminLoggedIn)); }, [isAdminLoggedIn]);
             useEffect(() => { localStorage.setItem('exceed_admin_packages', JSON.stringify(packages)); }, [packages]);
 
+            // ===============================================
+            // HELPER: DEDUKSI KEUANGAN YANG AKURAT 100%
+            // ===============================================
+            const getFinancials = (pkg) => {
+                const hBarang = Number(pkg.hargaPaket) || 0;
+                const tagihan = Number(pkg.totalTagihan) || 0;
+                const selisihTagihan = tagihan - hBarang > 0 ? tagihan - hBarang : 0;
+                
+                let oTambahan = Number(pkg.tambahanOngkir) || Number(pkg.ongkirTambahan) || Number(pkg.ongkir_tambahan) || Number(pkg.ongkirVolume) || Number(pkg.tambahan) || 0;
+                let oDasar = Number(pkg.ongkirDasar) || Number(pkg.ongkirReal) || Number(pkg.ongkir) || 0;
+                
+                // DEDUKSI CERDAS (Auto-koreksi agar Ongkir Tambahan & Beban Ongkir tidak 0)
+                if (oTambahan === 0 && oDasar > 0 && selisihTagihan > oDasar) {
+                    oTambahan = selisihTagihan - oDasar;
+                } else if (oTambahan === 0 && oDasar === 0 && selisihTagihan > 0) {
+                    oDasar = selisihTagihan;
+                }
+                if (oDasar === 0 && oTambahan > 0 && selisihTagihan > oTambahan) {
+                    oDasar = selisihTagihan - oTambahan;
+                }
+
+                return { hBarang, tagihan, oDasar, oTambahan, oTotal: oDasar + oTambahan };
+            };
+
             // Fetch Data dari Apps Script
             const syncData = async (isLoginAttempt = false) => {
                 setIsLoadingSync(true);
@@ -125,7 +149,6 @@
                 }
             };
 
-            // Init Load
             useEffect(() => {
                 if (isAdminLoggedIn && packages.length === 0) {
                     syncData();
@@ -249,16 +272,10 @@
                     const kurirName = String(pkg.kurirId || 'Tanpa Kurir').split('@')[0].toUpperCase();
                     const metode = String(pkg.metodeBayar).trim().toUpperCase();
                     
-                    const hBarang = Number(pkg.hargaPaket) || 0;
-                    const tagihan = Number(pkg.totalTagihan) || 0;
-                    const tambahanOngkir = Number(pkg.tambahanOngkir) || Number(pkg.ongkirTambahan) || Number(pkg.ongkir_tambahan) || Number(pkg.ongkirVolume) || Number(pkg.tambahan) || 0;
-                    
-                    let ongkir = pkg.ongkirReal !== undefined && Number(pkg.ongkirReal) > 0 ? Number(pkg.ongkirReal) : 0;
-                    if (ongkir === 0 && tagihan > hBarang) { ongkir = tagihan - hBarang; }
-                    const ongkirDasar = pkg.ongkirDasar !== undefined ? Number(pkg.ongkirDasar) : (ongkir - tambahanOngkir > 0 ? ongkir - tambahanOngkir : 0);
+                    const { hBarang, oDasar, oTambahan, oTotal } = getFinancials(pkg);
 
                     if (!oReport[olshopName]) {
-                        oReport[olshopName] = { totalSukses: 0, totalProses: 0, totalPending: 0, totalCancel: 0, pencairan: 0, potongan: 0, potonganDasar: 0, potonganTambahan: 0, nilaiBarang: 0, profit: 0, nominalBelumCair: 0, paketBelumCairIds: [], paketTerkait: [] };
+                        oReport[olshopName] = { totalSukses: 0, totalProses: 0, totalPending: 0, totalCancel: 0, pencairan: 0, potongan: 0, potonganDasar: 0, potonganTambahan: 0, totalDasar: 0, totalTambahan: 0, nilaiBarang: 0, profit: 0, nominalBelumCair: 0, paketBelumCairIds: [], paketTerkait: [] };
                     }
                     if (!kReport[kurirName]) {
                         kReport[kurirName] = { totalSukses: 0, totalProses: 0, totalPending: 0, totalCancel: 0, setoran: 0, rincianCash: 0, rincianMinusTf: 0, profit: 0, totalTfOlshop: 0, totalTfKantor: 0, totalTambahanOngkir: 0, paketTerkait: [] };
@@ -279,33 +296,34 @@
 
                     if (statusPkg === 'sukses') {
                         summary.totalPaketSukses += 1;
-                        summary.totalProfit += ongkirDasar;
-                        summary.totalOngkirTambahanKurir += tambahanOngkir;
+                        summary.totalProfit += oDasar;
+                        summary.totalOngkirTambahanKurir += oTambahan;
                         
-                        oReport[olshopName].profit += ongkirDasar;
-                        kReport[kurirName].profit += ongkirDasar;
-                        kReport[kurirName].totalTambahanOngkir += tambahanOngkir;
+                        oReport[olshopName].profit += oDasar;
+                        oReport[olshopName].totalDasar += oDasar;
+                        oReport[olshopName].totalTambahan += oTambahan;
+                        kReport[kurirName].profit += oDasar;
+                        kReport[kurirName].totalTambahanOngkir += oTambahan;
 
                         const isCair = String(pkg.statusPencairan).toLowerCase() === 'cair';
 
                         let pencairan = 0; let potongan = 0;
                         if (metode === 'TF OLSHOP') { 
-                            potongan = ongkir; 
-                            oReport[olshopName].potonganDasar += ongkirDasar;
-                            oReport[olshopName].potonganTambahan += tambahanOngkir;
-                            pencairan = -ongkir; 
+                            potongan = oTotal; 
+                            oReport[olshopName].potonganDasar += oDasar;
+                            oReport[olshopName].potonganTambahan += oTambahan;
+                            pencairan = -oTotal; 
                         } else if (metode === 'CASH' || metode === 'TF KANTOR' || metode === 'COD') { 
                             pencairan = hBarang; 
                         }
 
                         oReport[olshopName].pencairan += pencairan;
-                        if (metode === 'TF OLSHOP') oReport[olshopName].potongan += ongkir;
+                        if (metode === 'TF OLSHOP') oReport[olshopName].potongan += oTotal;
                         if (metode === 'CASH' || metode === 'TF KANTOR' || metode === 'COD') oReport[olshopName].nilaiBarang += hBarang;
                         summary.totalPencairanOlshop += pencairan;
 
                         if (!isCair) {
                             oReport[olshopName].nominalBelumCair += pencairan;
-                            // Tambahkan logic agar semua resi dicatat sebagai 'belum cair' terlepas plus minusnya. Ini penting jika ada TF Olshop (hutang ongkir).
                             oReport[olshopName].paketBelumCairIds.push(pkg.packageId); 
                             summary.totalDanaBelumCair += pencairan;
                         } else { summary.totalDanaCair += pencairan; }
@@ -313,13 +331,13 @@
                         let setoranKurir = 0;
                         if (metode === 'TF OLSHOP') {
                             kReport[kurirName].totalTfOlshop += hBarang;
-                            kReport[kurirName].rincianMinusTf += ongkir;
+                            kReport[kurirName].rincianMinusTf += oTotal;
                         } else if (metode === 'TF KANTOR') {
                             kReport[kurirName].totalTfKantor += hBarang;
-                            kReport[kurirName].rincianMinusTf += ongkir;
+                            kReport[kurirName].rincianMinusTf += oTotal;
                         } else if (metode === 'CASH' || metode === 'COD') {
-                            kReport[kurirName].rincianCash += (hBarang + ongkirDasar + tambahanOngkir);
-                            setoranKurir = hBarang + ongkirDasar; 
+                            kReport[kurirName].rincianCash += (hBarang + oTotal);
+                            setoranKurir = hBarang + oDasar; 
                         }
 
                         kReport[kurirName].setoran += setoranKurir;
@@ -413,7 +431,7 @@
                         {/* Area 1: SEARCH, Filter Tanggal, Status Global & Refresh */}
                         <div className="bg-[#1e293b] p-3 md:p-4 rounded-xl shadow-sm border border-slate-700 flex flex-col space-y-3">
                             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 w-full">
-                                {/* SEARCH BAR BARU */}
+                                {/* SEARCH BAR */}
                                 <div className="relative w-full md:max-w-sm">
                                     <i className="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 text-xs"></i>
                                     <input 
@@ -537,18 +555,22 @@
                                                             </div>
                                                             
                                                             {/* Bagian Kanan: Matrix Keuangan Dalam 1 Baris */}
-                                                            <div className="flex-1 flex justify-end items-center gap-4 md:gap-6">
+                                                            <div className="flex-1 flex justify-end items-center gap-4 md:gap-5">
                                                                 <div className="flex flex-col items-end justify-center min-w-[70px]">
-                                                                    <span className="text-[8px] font-bold text-emerald-500/70 uppercase tracking-widest mb-0.5">BARANG (CAIR)</span>
+                                                                    <span className="text-[8px] font-bold text-emerald-500/70 uppercase tracking-widest mb-0.5">BARANG</span>
                                                                     <span className="text-xs md:text-sm font-black text-emerald-400">+{formatCurrency(ol.nilaiBarang)}</span>
                                                                 </div>
                                                                 <div className="flex flex-col items-end justify-center min-w-[70px]">
-                                                                    <span className="text-[8px] font-bold text-red-500/70 uppercase tracking-widest mb-0.5">ONGKIR DASAR</span>
-                                                                    <span className="text-xs md:text-sm font-black text-red-400">-{formatCurrency(ol.potonganDasar)}</span>
+                                                                    <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">ONGKIR DSR</span>
+                                                                    <span className="text-xs md:text-sm font-black text-slate-400">{formatCurrency(ol.totalDasar)}</span>
                                                                 </div>
                                                                 <div className="flex flex-col items-end justify-center min-w-[70px]">
-                                                                    <span className="text-[8px] font-bold text-orange-500/70 uppercase tracking-widest mb-0.5">ONGKIR TAMB/VOL</span>
-                                                                    <span className="text-xs md:text-sm font-black text-orange-400">-{formatCurrency(ol.potonganTambahan)}</span>
+                                                                    <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">ONGKIR TMB</span>
+                                                                    <span className="text-xs md:text-sm font-black text-slate-400">{formatCurrency(ol.totalTambahan)}</span>
+                                                                </div>
+                                                                <div className="flex flex-col items-end justify-center min-w-[70px]">
+                                                                    <span className="text-[8px] font-bold text-red-500/70 uppercase tracking-widest mb-0.5">POTONGAN TF</span>
+                                                                    <span className="text-xs md:text-sm font-black text-red-400">-{formatCurrency(ol.potongan)}</span>
                                                                 </div>
                                                                 <div className="flex flex-col items-end justify-center min-w-[90px] pl-2 border-l border-slate-700">
                                                                     <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">TOTAL BERSIH</span>
@@ -602,11 +624,7 @@
                                                                             </thead>
                                                                             <tbody className="divide-y divide-slate-700/30 bg-[#1e293b]/50">
                                                                                 {displayedPaket.map((pkg, pIdx) => {
-                                                                                    const hBarang = Number(pkg.hargaPaket) || 0;
-                                                                                    const tagihan = Number(pkg.totalTagihan) || 0;
-                                                                                    const tambahan = Number(pkg.tambahanOngkir) || Number(pkg.ongkirTambahan) || Number(pkg.ongkir_tambahan) || Number(pkg.ongkirVolume) || Number(pkg.tambahan) || 0;
-                                                                                    const ongkir = pkg.ongkirReal !== undefined ? Number(pkg.ongkirReal) : ((tagihan - hBarang > 0) ? (tagihan - hBarang) : 0);
-                                                                                    const ongkirDasar = pkg.ongkirDasar !== undefined ? Number(pkg.ongkirDasar) : (ongkir - tambahan > 0 ? ongkir - tambahan : 0);
+                                                                                    const { hBarang, tagihan, oDasar, oTambahan } = getFinancials(pkg);
                                                                                     const isCair = String(pkg.statusPencairan).toLowerCase() === 'cair';
                                                                                     const isSukses = String(pkg.status).toLowerCase() === 'sukses';
                                                                                     let displayKurir = String(pkg.kurirId || 'Tanpa Kurir').split('@')[0];
@@ -640,8 +658,8 @@
                                                                                                 <div className={`font-bold ${isSukses ? 'text-emerald-400' : 'text-slate-400'}`}>{formatCurrency(hBarang)}</div>
                                                                                             </td>
                                                                                             <td className="py-2 px-3 text-right whitespace-nowrap">
-                                                                                                <div className={`font-bold ${isSukses ? 'text-red-400' : 'text-slate-400'}`} title="Ongkir Dasar">{formatCurrency(ongkirDasar)}</div>
-                                                                                                <div className={`text-[8px] font-bold mt-0.5 ${isSukses ? 'text-orange-400' : 'text-slate-500'}`} title="Tambahan / Volume">+ {formatCurrency(tambahan)}</div>
+                                                                                                <div className={`font-bold ${isSukses ? 'text-red-400' : 'text-slate-400'}`} title="Ongkir Dasar">{formatCurrency(oDasar)}</div>
+                                                                                                <div className={`text-[8px] font-bold mt-0.5 ${isSukses ? 'text-orange-400' : 'text-slate-500'}`} title="Tambahan / Volume">+ {formatCurrency(oTambahan)}</div>
                                                                                             </td>
                                                                                             <td className="py-2 px-3 text-center whitespace-nowrap align-middle">
                                                                                                 {pkg.fotoBukti ? (
@@ -775,11 +793,7 @@
                                                                             </thead>
                                                                             <tbody className="divide-y divide-slate-700/30 bg-[#1e293b]/50">
                                                                                 {displayedPaket.map((pkg, pIdx) => {
-                                                                                    const hBarang = Number(pkg.hargaPaket) || 0;
-                                                                                    const tagihan = Number(pkg.totalTagihan) || 0;
-                                                                                    const tambahan = Number(pkg.tambahanOngkir) || Number(pkg.ongkirTambahan) || Number(pkg.ongkir_tambahan) || Number(pkg.ongkirVolume) || Number(pkg.tambahan) || 0;
-                                                                                    const ongkir = pkg.ongkirReal !== undefined ? Number(pkg.ongkirReal) : ((tagihan - hBarang > 0) ? (tagihan - hBarang) : 0);
-                                                                                    const ongkirDasar = pkg.ongkirDasar !== undefined ? Number(pkg.ongkirDasar) : (ongkir - tambahan > 0 ? ongkir - tambahan : 0);
+                                                                                    const { hBarang, tagihan, oDasar, oTambahan } = getFinancials(pkg);
                                                                                     const isSukses = String(pkg.status).toLowerCase() === 'sukses';
                                                                                     let displayTgl = String(pkg.dateString || pkg.tanggal || '-');
                                                                                     if (displayTgl !== '-' && displayTgl.includes('T')) displayTgl = displayTgl.split('T')[0];
@@ -806,8 +820,8 @@
                                                                                                 <div className={`font-bold ${isSukses ? 'text-emerald-400' : 'text-slate-400'}`}>{formatCurrency(hBarang)}</div>
                                                                                             </td>
                                                                                             <td className="py-2 px-3 text-right whitespace-nowrap">
-                                                                                                <div className={`font-bold ${isSukses ? 'text-red-400' : 'text-slate-400'}`} title="Ongkir Dasar">{formatCurrency(ongkirDasar)}</div>
-                                                                                                <div className={`text-[8px] font-bold mt-0.5 ${isSukses ? 'text-orange-400' : 'text-slate-500'}`} title="Tambahan / Volume">+ {formatCurrency(tambahan)}</div>
+                                                                                                <div className={`font-bold ${isSukses ? 'text-red-400' : 'text-slate-400'}`} title="Ongkir Dasar">{formatCurrency(oDasar)}</div>
+                                                                                                <div className={`text-[8px] font-bold mt-0.5 ${isSukses ? 'text-orange-400' : 'text-slate-500'}`} title="Tambahan / Volume">+ {formatCurrency(oTambahan)}</div>
                                                                                             </td>
                                                                                             <td className="py-2 px-3 text-center whitespace-nowrap align-middle">
                                                                                                 {pkg.fotoBukti ? (
@@ -930,11 +944,7 @@
                                                                         </thead>
                                                                         <tbody className="divide-y divide-slate-700/30 bg-[#1e293b]/50">
                                                                             {suksesPackages.map((pkg, pIdx) => {
-                                                                                const hBarang = Number(pkg.hargaPaket) || 0;
-                                                                                const tagihan = Number(pkg.totalTagihan) || 0;
-                                                                                const tambahan = Number(pkg.tambahanOngkir) || Number(pkg.ongkirTambahan) || Number(pkg.ongkir_tambahan) || Number(pkg.ongkirVolume) || Number(pkg.tambahan) || 0;
-                                                                                const ongkir = pkg.ongkirReal !== undefined ? Number(pkg.ongkirReal) : ((tagihan - hBarang > 0) ? (tagihan - hBarang) : 0);
-                                                                                const ongkirDasar = pkg.ongkirDasar !== undefined ? Number(pkg.ongkirDasar) : (ongkir - tambahan > 0 ? ongkir - tambahan : 0);
+                                                                                const { hBarang, tagihan, oDasar, oTambahan } = getFinancials(pkg);
                                                                                 
                                                                                 let displayKurir = String(pkg.kurirId || 'Tanpa Kurir').split('@')[0];
                                                                                 let displayTgl = String(pkg.dateString || pkg.tanggal || '-');
@@ -957,10 +967,10 @@
                                                                                             <div className="text-slate-500 text-[8px] font-bold mt-0.5 uppercase">{pkg.metodeBayar || '-'}</div>
                                                                                         </td>
                                                                                         <td className="py-2 px-3 text-right whitespace-nowrap">
-                                                                                            <div className="font-bold text-orange-400">{formatCurrency(tambahan)}</div>
+                                                                                            <div className="font-bold text-orange-400">{formatCurrency(oTambahan)}</div>
                                                                                         </td>
                                                                                         <td className="py-2 px-3 text-right whitespace-nowrap">
-                                                                                            <div className="font-black text-emerald-400 text-xs">+{formatCurrency(ongkirDasar)}</div>
+                                                                                            <div className="font-black text-emerald-400 text-xs">+{formatCurrency(oDasar)}</div>
                                                                                         </td>
                                                                                     </tr>
                                                                                 );
