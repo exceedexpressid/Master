@@ -67,21 +67,26 @@
             const [globalStatusFilter, setGlobalStatusFilter] = useState('semua');
             const [activeTab, setActiveTab] = useState('olshop'); // 'olshop', 'kurir', 'profit'
             
-            // State untuk Accordion Olshop & Kurir
+            // State untuk Accordion
             const [expandedOlshops, setExpandedOlshops] = useState([]); 
             const [olshopFilters, setOlshopFilters] = useState({}); 
             const [expandedKurirs, setExpandedKurirs] = useState([]); 
             const [kurirFilters, setKurirFilters] = useState({}); 
-            
-            // State untuk Accordion & Filter Tab Profit
             const [profitViewBy, setProfitViewBy] = useState('olshop'); 
             const [expandedProfitItems, setExpandedProfitItems] = useState([]); 
 
-            // State Modal Gambar & Modal Cairkan
+            // State Modals
             const [selectedImage, setSelectedImage] = useState(null);
             const [isCairkanModalOpen, setIsCairkanModalOpen] = useState(false);
             const [selectedOlshopToCairkan, setSelectedOlshopToCairkan] = useState(null);
             const [isProcessingCair, setIsProcessingCair] = useState(false);
+
+            // =====================================================================
+            // STATE & FUNGSI EDIT REVISI HARGA (BARU)
+            // =====================================================================
+            const [editingPkg, setEditingPkg] = useState(null);
+            const [editFormData, setEditFormData] = useState({ totalTagihan: 0, hargaPaket: 0, ongkirDasar: 0, tambahanOngkir: 0 });
+            const [isSavingEdit, setIsSavingEdit] = useState(false);
 
             // Toggle Accordion Functions
             const toggleOlshop = (name) => setExpandedOlshops(prev => prev.includes(name) ? prev.filter(n => n !== name) : [...prev, name]);
@@ -97,9 +102,7 @@
             useEffect(() => { localStorage.setItem('exceed_admin_logged_in', JSON.stringify(isAdminLoggedIn)); }, [isAdminLoggedIn]);
             useEffect(() => { localStorage.setItem('exceed_admin_packages', JSON.stringify(packages)); }, [packages]);
 
-            // ===============================================
-            // HELPER: DEDUKSI KEUANGAN YANG AKURAT 100%
-            // ===============================================
+            // HELPER: DEDUKSI KEUANGAN
             const getFinancials = (pkg) => {
                 const hBarang = Number(pkg.hargaPaket) || 0;
                 const tagihan = Number(pkg.totalTagihan) || 0;
@@ -108,7 +111,6 @@
                 let oTambahan = Number(pkg.tambahanOngkir) || Number(pkg.ongkirTambahan) || Number(pkg.ongkir_tambahan) || Number(pkg.ongkirVolume) || Number(pkg.tambahan) || 0;
                 let oDasar = Number(pkg.ongkirDasar) || Number(pkg.ongkirReal) || Number(pkg.ongkir) || 0;
                 
-                // DEDUKSI CERDAS (Auto-koreksi agar Ongkir Tambahan & Beban Ongkir tidak 0)
                 if (oTambahan === 0 && oDasar > 0 && selisihTagihan > oDasar) {
                     oTambahan = selisihTagihan - oDasar;
                 } else if (oTambahan === 0 && oDasar === 0 && selisihTagihan > 0) {
@@ -119,6 +121,71 @@
                 }
 
                 return { hBarang, tagihan, oDasar, oTambahan, oTotal: oDasar + oTambahan };
+            };
+
+            const openEditModal = (pkg) => {
+                const fins = getFinancials(pkg);
+                setEditFormData({
+                    totalTagihan: fins.tagihan,
+                    hargaPaket: fins.hBarang,
+                    ongkirDasar: fins.oDasar,
+                    tambahanOngkir: fins.oTambahan
+                });
+                setEditingPkg(pkg);
+            };
+
+            const handleEditFormChange = (e) => {
+                const { name, value } = e.target;
+                setEditFormData(prev => ({ ...prev, [name]: Number(value) || 0 }));
+            };
+
+            const handleSaveEdit = async (e) => {
+                e.preventDefault();
+                setIsSavingEdit(true);
+                setSyncMessage({ text: `Menyimpan revisi resi ${editingPkg.packageId}...`, type: 'info' });
+
+                try {
+                    const formData = new URLSearchParams();
+                    formData.append('action', 'editPackageData');
+                    formData.append('packageId', editingPkg.packageId);
+                    formData.append('totalTagihan', editFormData.totalTagihan);
+                    formData.append('hargaPaket', editFormData.hargaPaket);
+                    formData.append('ongkirDasar', editFormData.ongkirDasar);
+                    formData.append('tambahanOngkir', editFormData.tambahanOngkir);
+
+                    const response = await fetch(SCRIPT_URL, {
+                        method: 'POST',
+                        body: formData,
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (result.status === 'success') {
+                        setSyncMessage({ text: `Revisi resi ${editingPkg.packageId} berhasil disimpan!`, type: 'success' });
+                        // Update Data Lokal agar tidak perlu nunggu refresh total
+                        setPackages(prevPkgs => prevPkgs.map(p => {
+                            if (p.packageId === editingPkg.packageId) {
+                                return {
+                                    ...p,
+                                    totalTagihan: editFormData.totalTagihan,
+                                    hargaPaket: editFormData.hargaPaket,
+                                    ongkirDasar: editFormData.ongkirDasar,
+                                    tambahanOngkir: editFormData.tambahanOngkir
+                                };
+                            }
+                            return p;
+                        }));
+                        setEditingPkg(null);
+                    } else {
+                        setSyncMessage({ text: 'Gagal menyimpan revisi: ' + result.message, type: 'error' });
+                    }
+                } catch (error) {
+                    setSyncMessage({ text: 'Koneksi terputus saat menyimpan.', type: 'error' });
+                } finally {
+                    setIsSavingEdit(false);
+                    setTimeout(() => setSyncMessage({ text: '', type: '' }), 4000);
+                }
             };
 
             // Fetch Data dari Apps Script
@@ -155,12 +222,10 @@
                 }
             }, [isAdminLoggedIn]);
 
-            // Login Handler KHUSUS ADMIN
             const handleLogin = async (e) => {
                 e.preventDefault();
                 setSyncMessage({ text: 'Memeriksa kredensial...', type: 'info' });
 
-                // HARDCODED CREDENTIALS 
                 if ((loginUname === 'ellyasma991' && loginPass === '082213663662') || 
                     (loginUname === 'idypandhu' && loginPass === '082257849332')) {
                     setIsAdminLoggedIn(true);
@@ -176,7 +241,6 @@
                 setPackages([]);
             };
 
-            // PROSES CAIRKAN KE SPREADSHEET
             const handleProsesCairkan = async () => {
                 if (!selectedOlshopToCairkan || selectedOlshopToCairkan.paketBelumCairIds.length === 0) return;
                 
@@ -199,7 +263,7 @@
                     if (result.status === 'success') {
                         setSyncMessage({ text: `Berhasil mencairkan ${result.updated} paket untuk ${selectedOlshopToCairkan.name}!`, type: 'success' });
                         setIsCairkanModalOpen(false);
-                        syncData(); // Tarik data terbaru setelah diupdate
+                        syncData(); 
                     } else {
                         setSyncMessage({ text: 'Gagal memproses: ' + result.message, type: 'error' });
                     }
@@ -210,13 +274,9 @@
                 }
             };
 
-            // ==========================================
-            // FILTER & KALKULASI LAPORAN 
-            // ==========================================
             const { filteredPkgs, olshopReport, kurirReport, globalSummary } = useMemo(() => {
                 let pkgs = packages;
 
-                // 1. FILTER PENCARIAN
                 if (searchQuery) {
                     const q = searchQuery.toLowerCase().trim();
                     pkgs = pkgs.filter(p => 
@@ -227,7 +287,6 @@
                     );
                 }
 
-                // 2. FILTER TANGGAL
                 if (startDate || endDate) {
                    pkgs = pkgs.filter(p => {
                       let pDateStr = p.dateString || p.tanggal || '';
@@ -252,7 +311,6 @@
                    });
                 }
 
-                // 3. FILTER STATUS GLOBAL
                 if (globalStatusFilter !== 'semua') {
                     pkgs = pkgs.filter(p => {
                         let stat = String(p.status).toLowerCase().trim().replace(' ', '_');
@@ -274,12 +332,8 @@
                     
                     const { hBarang, oDasar, oTambahan, oTotal } = getFinancials(pkg);
 
-                    if (!oReport[olshopName]) {
-                        oReport[olshopName] = { totalSukses: 0, totalProses: 0, totalPending: 0, totalCancel: 0, pencairan: 0, potongan: 0, potonganDasar: 0, potonganTambahan: 0, totalDasar: 0, totalTambahan: 0, nilaiBarang: 0, profit: 0, nominalBelumCair: 0, paketBelumCairIds: [], paketTerkait: [] };
-                    }
-                    if (!kReport[kurirName]) {
-                        kReport[kurirName] = { totalSukses: 0, totalProses: 0, totalPending: 0, totalCancel: 0, setoran: 0, rincianCash: 0, rincianMinusTf: 0, profit: 0, totalTfOlshop: 0, totalTfKantor: 0, totalTambahanOngkir: 0, paketTerkait: [] };
-                    }
+                    if (!oReport[olshopName]) oReport[olshopName] = { totalSukses: 0, totalProses: 0, totalPending: 0, totalCancel: 0, pencairan: 0, potongan: 0, potonganDasar: 0, potonganTambahan: 0, totalDasar: 0, totalTambahan: 0, nilaiBarang: 0, profit: 0, nominalBelumCair: 0, paketBelumCairIds: [], paketTerkait: [] };
+                    if (!kReport[kurirName]) kReport[kurirName] = { totalSukses: 0, totalProses: 0, totalPending: 0, totalCancel: 0, setoran: 0, rincianCash: 0, rincianMinusTf: 0, profit: 0, totalTfOlshop: 0, totalTfKantor: 0, totalTambahanOngkir: 0, paketTerkait: [] };
                     
                     oReport[olshopName].paketTerkait.push(pkg);
                     kReport[kurirName].paketTerkait.push(pkg);
@@ -359,7 +413,6 @@
                 return { filteredPkgs: pkgs, olshopReport: sortedOlshop, kurirReport: sortedKurir, globalSummary: summary };
             }, [packages, startDate, endDate, globalStatusFilter, searchQuery]);
 
-            // KOMPONEN: Badge Status Rincian Resi
             const StatusBadgeAdmin = ({ status }) => {
                 const s = String(status).toLowerCase();
                 if(s === 'sukses') return <span className="text-emerald-400 bg-emerald-900/30 px-1.5 py-0.5 rounded text-[8px] md:text-[9px] font-bold uppercase border border-emerald-800/50"><i className="fas fa-check-circle mr-1"></i>Sukses</span>;
@@ -368,9 +421,6 @@
                 return <span className="text-blue-400 bg-blue-900/30 px-1.5 py-0.5 rounded text-[8px] md:text-[9px] font-bold uppercase border border-blue-800/50"><i className="fas fa-truck mr-1"></i>Proses</span>;
             };
 
-            // ==========================================
-            // RENDER HALAMAN LOGIN
-            // ==========================================
             if (!isAdminLoggedIn) {
                 return (
                     <div className="min-h-screen flex items-center justify-center bg-[#0f172a] p-4 relative overflow-hidden">
@@ -405,12 +455,8 @@
                 );
             }
 
-            // ==========================================
-            // RENDER DASHBOARD ADMIN
-            // ==========================================
             return (
                 <div className="min-h-screen bg-[#0f172a] font-sans w-full mx-auto shadow-2xl relative flex flex-col">
-                    {/* Header Administrator */}
                     <header className="bg-[#1e293b] px-4 py-3 md:py-4 shadow-md z-10 sticky top-0 flex justify-between items-center border-b border-slate-700">
                         <div className="flex items-center">
                             <div className="w-8 h-8 md:w-10 md:h-10 bg-[#e65c00] rounded-lg flex items-center justify-center mr-3 text-white shadow-sm">
@@ -428,55 +474,39 @@
 
                     <div className="flex-1 overflow-y-auto p-3 md:p-5 lg:p-6 space-y-4 md:space-y-6 pb-10 max-w-7xl mx-auto w-full">
                         
-                        {/* Area 1: SEARCH, Filter Tanggal, Status Global & Refresh */}
+                        {/* Area 1: SEARCH & FILTER */}
                         <div className="bg-[#1e293b] p-3 md:p-4 rounded-xl shadow-sm border border-slate-700 flex flex-col space-y-3">
+                            {syncMessage.text && (
+                                <div className={`text-xs py-2 px-3 rounded-lg font-bold flex items-center justify-between ${syncMessage.type === 'error' ? 'bg-red-900/50 text-red-400 border border-red-800' : syncMessage.type === 'info' ? 'bg-blue-900/50 text-blue-400 border border-blue-800' : 'bg-emerald-900/50 text-emerald-400 border border-emerald-800'}`}>
+                                    <div className="flex items-center">
+                                        <i className={`fas ${syncMessage.type === 'error' ? 'fa-exclamation-triangle' : syncMessage.type === 'info' ? 'fa-spinner fa-spin' : 'fa-check-circle'} mr-2`}></i>
+                                        <span>{syncMessage.text}</span>
+                                    </div>
+                                    <button onClick={() => setSyncMessage({text:'', type:''})}><i className="fas fa-times opacity-70 hover:opacity-100"></i></button>
+                                </div>
+                            )}
                             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 w-full">
-                                {/* SEARCH BAR */}
                                 <div className="relative w-full md:max-w-sm">
                                     <i className="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 text-xs"></i>
-                                    <input 
-                                        type="text" 
-                                        placeholder="Cari Resi, Customer, Olshop, Kurir..." 
-                                        value={searchQuery} 
-                                        onChange={(e) => setSearchQuery(e.target.value)} 
-                                        className="w-full pl-8 pr-3 py-2.5 bg-slate-800 border border-slate-600 rounded-lg text-[10px] md:text-xs outline-none focus:border-[#e65c00] text-slate-200 placeholder-slate-500 transition-colors" 
-                                    />
+                                    <input type="text" placeholder="Cari Resi, Customer, Olshop..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full pl-8 pr-3 py-2.5 bg-slate-800 border border-slate-600 rounded-lg text-[10px] md:text-xs outline-none focus:border-[#e65c00] text-slate-200 placeholder-slate-500 transition-colors" />
                                 </div>
-                                
-                                {/* FILTER TANGGAL & REFRESH */}
                                 <div className="flex flex-col md:flex-row items-center gap-2 w-full md:w-auto">
-                                    <div className="relative w-full md:w-36">
-                                        <i className="fas fa-calendar absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 text-[10px] md:text-xs"></i>
-                                        <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="w-full pl-8 pr-2 py-2 bg-slate-800 border border-slate-600 rounded-lg text-[10px] md:text-xs outline-none focus:border-[#e65c00] text-slate-200" />
-                                    </div>
+                                    <div className="relative w-full md:w-36"><i className="fas fa-calendar absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 text-[10px] md:text-xs"></i><input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="w-full pl-8 pr-2 py-2 bg-slate-800 border border-slate-600 rounded-lg text-[10px] md:text-xs outline-none focus:border-[#e65c00] text-slate-200" /></div>
                                     <span className="hidden md:block text-[10px] font-bold text-slate-500">Hingga</span>
-                                    <div className="relative w-full md:w-36">
-                                        <i className="fas fa-calendar absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 text-[10px] md:text-xs"></i>
-                                        <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="w-full pl-8 pr-2 py-2 bg-slate-800 border border-slate-600 rounded-lg text-[10px] md:text-xs outline-none focus:border-[#e65c00] text-slate-200" />
-                                    </div>
+                                    <div className="relative w-full md:w-36"><i className="fas fa-calendar absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 text-[10px] md:text-xs"></i><input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="w-full pl-8 pr-2 py-2 bg-slate-800 border border-slate-600 rounded-lg text-[10px] md:text-xs outline-none focus:border-[#e65c00] text-slate-200" /></div>
                                     {(startDate || endDate) && (<button onClick={() => { setStartDate(''); setEndDate(''); }} className="p-2 bg-slate-700 text-red-400 rounded-lg hover:bg-slate-600 w-full md:w-auto flex justify-center items-center"><i className="fas fa-times-circle"></i></button>)}
-                                    <button onClick={() => syncData()} disabled={isLoadingSync} className={`w-full md:w-auto flex items-center justify-center bg-[#e65c00] hover:bg-[#cc5200] px-4 py-2 rounded-lg transition-all ml-1 ${isLoadingSync ? 'opacity-50 cursor-not-allowed' : ''}`}>
-                                        <i className={`fas fa-sync-alt text-white mr-2 text-[10px] md:text-xs ${isLoadingSync ? 'animate-spin' : ''}`}></i>
-                                        <span className="text-white text-[10px] md:text-xs font-bold">{isLoadingSync ? 'Memuat...' : 'Refresh'}</span>
-                                    </button>
+                                    <button onClick={() => syncData()} disabled={isLoadingSync} className={`w-full md:w-auto flex items-center justify-center bg-[#e65c00] hover:bg-[#cc5200] px-4 py-2 rounded-lg transition-all ml-1 ${isLoadingSync ? 'opacity-50 cursor-not-allowed' : ''}`}><i className={`fas fa-sync-alt text-white mr-2 text-[10px] md:text-xs ${isLoadingSync ? 'animate-spin' : ''}`}></i><span className="text-white text-[10px] md:text-xs font-bold">{isLoadingSync ? 'Memuat...' : 'Refresh'}</span></button>
                                 </div>
                             </div>
-                            
                             <div className="flex items-center space-x-2 overflow-x-auto pb-1 scrollbar-hide w-full border-t border-slate-700/50 pt-3">
                                 <span className="text-slate-400 text-[10px] md:text-xs font-bold flex items-center mr-2 flex-shrink-0"><i className="fas fa-filter mr-1.5"></i> Status:</span>
                                 {[{id:'semua', label:'Semua'}, {id:'sukses', label:'Sukses'}, {id:'proses', label:'Proses'}, {id:'pending', label:'Pending'}, {id:'cancel', label:'Cancel'}].map(f => (
-                                    <button 
-                                        key={f.id}
-                                        onClick={() => setGlobalStatusFilter(f.id)}
-                                        className={`px-3 py-1.5 rounded-lg text-[10px] md:text-xs font-bold uppercase transition-colors whitespace-nowrap border ${globalStatusFilter === f.id ? 'bg-[#e65c00] text-white border-[#e65c00]' : 'bg-slate-800 text-slate-400 border-slate-600 hover:bg-slate-700 hover:text-slate-200'}`}
-                                    >
-                                        {f.label}
-                                    </button>
+                                    <button key={f.id} onClick={() => setGlobalStatusFilter(f.id)} className={`px-3 py-1.5 rounded-lg text-[10px] md:text-xs font-bold uppercase transition-colors whitespace-nowrap border ${globalStatusFilter === f.id ? 'bg-[#e65c00] text-white border-[#e65c00]' : 'bg-slate-800 text-slate-400 border-slate-600 hover:bg-slate-700 hover:text-slate-200'}`}>{f.label}</button>
                                 ))}
                             </div>
                         </div>
 
-                        {/* Area 2: Ringkasan Eksekutif */}
+                        {/* Area 2: Ringkasan */}
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
                             <div className="bg-gradient-to-br from-emerald-600 to-emerald-800 rounded-xl p-4 md:p-5 text-white shadow-md relative overflow-hidden">
                                 <div className="absolute -right-2 -bottom-4 opacity-20"><i className="fas fa-chart-line text-[80px]"></i></div>
@@ -498,455 +528,198 @@
                             </div>
                         </div>
 
-                        {/* Area 3: Navigasi Tab */}
+                        {/* Navigasi Tab */}
                         <div className="flex border-b border-slate-700 space-x-2 md:space-x-6">
-                            <button onClick={() => setActiveTab('olshop')} className={`pb-3 text-xs md:text-sm font-bold transition-colors ${activeTab === 'olshop' ? 'text-[#e65c00] border-b-2 border-[#e65c00]' : 'text-slate-400 hover:text-slate-300'}`}>
-                                <i className="fas fa-store mr-1.5"></i> Laporan Olshop
-                            </button>
-                            <button onClick={() => setActiveTab('kurir')} className={`pb-3 text-xs md:text-sm font-bold transition-colors ${activeTab === 'kurir' ? 'text-blue-500 border-b-2 border-blue-500' : 'text-slate-400 hover:text-slate-300'}`}>
-                                <i className="fas fa-motorcycle mr-1.5"></i> Laporan Kurir
-                            </button>
-                            <button onClick={() => setActiveTab('profit')} className={`pb-3 text-xs md:text-sm font-bold transition-colors ${activeTab === 'profit' ? 'text-emerald-500 border-b-2 border-emerald-500' : 'text-slate-400 hover:text-slate-300'}`}>
-                                <i className="fas fa-chart-pie mr-1.5"></i> Laporan Profit
-                            </button>
+                            <button onClick={() => setActiveTab('olshop')} className={`pb-3 text-xs md:text-sm font-bold transition-colors ${activeTab === 'olshop' ? 'text-[#e65c00] border-b-2 border-[#e65c00]' : 'text-slate-400 hover:text-slate-300'}`}>Laporan Olshop</button>
+                            <button onClick={() => setActiveTab('kurir')} className={`pb-3 text-xs md:text-sm font-bold transition-colors ${activeTab === 'kurir' ? 'text-blue-500 border-b-2 border-blue-500' : 'text-slate-400 hover:text-slate-300'}`}>Laporan Kurir</button>
+                            <button onClick={() => setActiveTab('profit')} className={`pb-3 text-xs md:text-sm font-bold transition-colors ${activeTab === 'profit' ? 'text-emerald-500 border-b-2 border-emerald-500' : 'text-slate-400 hover:text-slate-300'}`}>Laporan Profit</button>
                         </div>
 
-                        {/* =========================================================
-                            TAMPILAN TAB 1: LAPORAN OLSHOP (FLEX GRID SUPER COMPACT)
-                            ========================================================= */}
+                        {/* ==================== TAB 1: OLSHOP ==================== */}
                         {activeTab === 'olshop' && (
                             <div className="bg-[#1e293b] rounded-xl shadow-sm border border-slate-700 overflow-hidden">
                                 <div className="p-3 md:p-4 border-b border-slate-700 bg-slate-800/50 flex justify-between items-center">
-                                    <h3 className="font-bold text-slate-200 text-xs md:text-sm">Rekapitulasi Pencairan Olshop <span className="text-[10px] text-slate-400 font-normal ml-2">(Klik baris untuk rincian)</span></h3>
+                                    <h3 className="font-bold text-slate-200 text-xs md:text-sm">Rekapitulasi Pencairan Olshop</h3>
                                 </div>
-                                
                                 <div className="overflow-x-auto scrollbar-hide">
                                     <div className="min-w-[1000px] flex flex-col">
-                                        {olshopReport.length === 0 ? (
-                                            <div className="p-8 text-center text-slate-500">Tidak ada transaksi di periode/status ini.</div>
-                                        ) : (
-                                            olshopReport.map((ol, idx) => {
-                                                const isExpanded = expandedOlshops.includes(ol.name);
-                                                const currentFilter = olshopFilters[ol.name] || 'semua';
-                                                
-                                                const displayedPaket = ol.paketTerkait.filter(pkg => {
-                                                    if (currentFilter === 'semua') return true;
-                                                    let stat = String(pkg.status).toLowerCase().replace(' ', '_');
-                                                    if (currentFilter === 'proses') return stat === 'siap_antar' || stat === 'proses';
-                                                    return stat === currentFilter;
-                                                });
-                                                
-                                                return (
-                                                    <div key={idx} className="flex flex-col border-b border-slate-700/50 hover:bg-slate-800/30 transition-colors">
-                                                        
-                                                        {/* BARIS UTAMA (GRID SUPER COMPACT) */}
-                                                        <div 
-                                                            className="flex items-center justify-between p-3 md:p-4 cursor-pointer"
-                                                            onClick={() => toggleOlshop(ol.name)}
-                                                        >
-                                                            {/* Bagian Kiri: Nama & Badge */}
-                                                            <div className="flex items-center gap-2.5 w-[220px] md:w-[280px] shrink-0">
-                                                                <div className={`w-5 h-5 rounded flex items-center justify-center transition-transform ${isExpanded ? 'bg-[#e65c00] text-white rotate-180' : 'bg-slate-700 text-slate-400'}`}>
-                                                                    <i className="fas fa-chevron-down text-[10px]"></i>
-                                                                </div>
-                                                                <i className="fas fa-store text-[#e65c00]"></i>
-                                                                <span className="font-bold text-slate-200 uppercase truncate text-xs md:text-sm">{ol.name}</span>
-                                                                <span className="text-[9px] bg-slate-700 text-slate-300 px-2 py-0.5 rounded shrink-0 font-bold">{ol.paketTerkait.length} Pkt</span>
-                                                            </div>
-                                                            
-                                                            {/* Bagian Kanan: Matrix Keuangan Dalam 1 Baris */}
-                                                            <div className="flex-1 flex justify-end items-center gap-4 md:gap-5">
-                                                                <div className="flex flex-col items-end justify-center min-w-[70px]">
-                                                                    <span className="text-[8px] font-bold text-emerald-500/70 uppercase tracking-widest mb-0.5">BARANG</span>
-                                                                    <span className="text-xs md:text-sm font-black text-emerald-400">+{formatCurrency(ol.nilaiBarang)}</span>
-                                                                </div>
-                                                                <div className="flex flex-col items-end justify-center min-w-[70px]">
-                                                                    <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">ONGKIR DSR</span>
-                                                                    <span className="text-xs md:text-sm font-black text-slate-400">{formatCurrency(ol.totalDasar)}</span>
-                                                                </div>
-                                                                <div className="flex flex-col items-end justify-center min-w-[70px]">
-                                                                    <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">ONGKIR TMB</span>
-                                                                    <span className="text-xs md:text-sm font-black text-slate-400">{formatCurrency(ol.totalTambahan)}</span>
-                                                                </div>
-                                                                <div className="flex flex-col items-end justify-center min-w-[70px]">
-                                                                    <span className="text-[8px] font-bold text-red-500/70 uppercase tracking-widest mb-0.5">POTONGAN TF</span>
-                                                                    <span className="text-xs md:text-sm font-black text-red-400">-{formatCurrency(ol.potongan)}</span>
-                                                                </div>
-                                                                <div className="flex flex-col items-end justify-center min-w-[90px] pl-2 border-l border-slate-700">
-                                                                    <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">TOTAL BERSIH</span>
-                                                                    <span className={`text-[13px] md:text-[15px] font-black ${ol.pencairan >= 0 ? 'text-[#e65c00]' : 'text-red-500'}`}>{formatCurrency(ol.pencairan)}</span>
-                                                                    {ol.nominalBelumCair !== ol.pencairan && ol.nominalBelumCair !== 0 && (
-                                                                        <span className="text-[8px] text-slate-500 mt-0.5">Blm Cair: {formatCurrency(ol.nominalBelumCair)}</span>
-                                                                    )}
-                                                                </div>
-                                                                <div className="min-w-[95px] flex justify-end ml-2" onClick={(e) => e.stopPropagation()}>
-                                                                    {ol.paketBelumCairIds.length > 0 ? (
-                                                                        <button onClick={() => openCairkanModal(ol)} className="bg-emerald-500 hover:bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-[10px] font-bold shadow-sm w-full transition-colors flex items-center justify-center">
-                                                                            <i className="fas fa-hand-holding-usd mr-1.5"></i> Cairkan ({ol.paketBelumCairIds.length})
-                                                                        </button>
-                                                                    ) : (
-                                                                        <button disabled className="bg-slate-700 text-slate-400 px-3 py-1.5 rounded-lg text-[10px] font-bold w-full border border-slate-600">LUNAS</button>
-                                                                    )}
-                                                                </div>
-                                                            </div>
+                                        {olshopReport.length === 0 ? <div className="p-8 text-center text-slate-500">Tidak ada transaksi</div> : olshopReport.map((ol, idx) => {
+                                            const isExpanded = expandedOlshops.includes(ol.name);
+                                            const currentFilter = olshopFilters[ol.name] || 'semua';
+                                            const displayedPaket = ol.paketTerkait.filter(pkg => {
+                                                if (currentFilter === 'semua') return true;
+                                                let stat = String(pkg.status).toLowerCase().replace(' ', '_');
+                                                if (currentFilter === 'proses') return stat === 'siap_antar' || stat === 'proses';
+                                                return stat === currentFilter;
+                                            });
+                                            return (
+                                                <div key={idx} className="flex flex-col border-b border-slate-700/50 hover:bg-slate-800/30 transition-colors">
+                                                    <div className="flex items-center justify-between p-3 md:p-4 cursor-pointer" onClick={() => toggleOlshop(ol.name)}>
+                                                        <div className="flex items-center gap-2.5 w-[220px] md:w-[280px] shrink-0">
+                                                            <div className={`w-5 h-5 rounded flex items-center justify-center transition-transform ${isExpanded ? 'bg-[#e65c00] text-white rotate-180' : 'bg-slate-700 text-slate-400'}`}><i className="fas fa-chevron-down text-[10px]"></i></div>
+                                                            <i className="fas fa-store text-[#e65c00]"></i>
+                                                            <span className="font-bold text-slate-200 uppercase truncate text-xs md:text-sm">{ol.name}</span>
+                                                            <span className="text-[9px] bg-slate-700 text-slate-300 px-2 py-0.5 rounded shrink-0 font-bold">{ol.paketTerkait.length} Pkt</span>
                                                         </div>
-
-                                                        {/* RINCIAN DALAM (TABEL 1 BARIS SEPERTI PORTAL KLIEN) */}
-                                                        {isExpanded && (
-                                                            <div className="p-3 md:p-4 bg-[#0f172a]/60 animate-fade-in-down border-t border-slate-700/50">
-                                                                <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-3 gap-3">
-                                                                    <h4 className="text-slate-400 font-bold text-[10px] uppercase tracking-widest flex items-center"><i className="fas fa-boxes mr-2"></i>Rincian Resi: {ol.name}</h4>
-                                                                    <div className="flex flex-wrap gap-1.5">
-                                                                        {[{id:'semua', label:'Semua'}, {id:'sukses', label:'Sukses'}, {id:'proses', label:'Proses'}, {id:'pending', label:'Pending'}, {id:'cancel', label:'Cancel'}].map(f => (
-                                                                            <button key={f.id} onClick={(e) => { e.stopPropagation(); setOlshopFilters(prev => ({...prev, [ol.name]: f.id})); }}
-                                                                                className={`px-2.5 py-1 rounded text-[9px] font-bold uppercase transition-colors border ${currentFilter === f.id ? 'bg-[#e65c00] text-white border-[#e65c00]' : 'bg-slate-800 text-slate-400 border-slate-600 hover:bg-slate-700'}`}>
-                                                                                {f.label}
-                                                                            </button>
-                                                                        ))}
-                                                                    </div>
-                                                                </div>
-                                                                
-                                                                {displayedPaket.length === 0 ? (
-                                                                    <div className="text-center py-4 text-slate-500 text-xs italic">Tidak ada paket dengan filter tersebut.</div>
-                                                                ) : (
-                                                                    <div className="overflow-x-auto rounded-lg border border-slate-700/50">
-                                                                        <table className="w-full text-left text-[9px] md:text-[10px]">
-                                                                            <thead className="bg-slate-800 text-slate-400 border-b border-slate-700/50 uppercase tracking-wider">
-                                                                                <tr>
-                                                                                    <th className="py-2 px-3 font-bold">Resi & Tgl</th>
-                                                                                    <th className="py-2 px-3 font-bold">Penerima & Kurir</th>
-                                                                                    <th className="py-2 px-3 font-bold text-center">Status</th>
-                                                                                    <th className="py-2 px-3 font-bold text-right">Tagihan & Mtd</th>
-                                                                                    <th className="py-2 px-3 font-bold text-right">Brg (Hrg)</th>
-                                                                                    <th className="py-2 px-3 font-bold text-right">Ongkir (Dsr+Tmb)</th>
-                                                                                    <th className="py-2 px-3 font-bold text-center">Bukti</th>
-                                                                                </tr>
-                                                                            </thead>
-                                                                            <tbody className="divide-y divide-slate-700/30 bg-[#1e293b]/50">
-                                                                                {displayedPaket.map((pkg, pIdx) => {
-                                                                                    const { hBarang, tagihan, oDasar, oTambahan } = getFinancials(pkg);
-                                                                                    const isCair = String(pkg.statusPencairan).toLowerCase() === 'cair';
-                                                                                    const isSukses = String(pkg.status).toLowerCase() === 'sukses';
-                                                                                    let displayKurir = String(pkg.kurirId || 'Tanpa Kurir').split('@')[0];
-                                                                                    let displayTgl = String(pkg.dateString || pkg.tanggal || '-');
-                                                                                    if (displayTgl !== '-' && displayTgl.includes('T')) displayTgl = displayTgl.split('T')[0];
-
-                                                                                    return (
-                                                                                        <tr key={pIdx} className="hover:bg-slate-700/30 transition-colors">
-                                                                                            <td className="py-2 px-3 whitespace-nowrap">
-                                                                                                <div className="text-[#e65c00] font-mono font-bold bg-orange-900/20 px-1.5 py-0.5 rounded border border-orange-800/30 inline-block">{pkg.packageId}</div>
-                                                                                                <div className="text-slate-500 mt-1 text-[8px]"><i className="far fa-calendar-alt mr-1"></i>{displayTgl}</div>
-                                                                                            </td>
-                                                                                            <td className="py-2 px-3">
-                                                                                                <div className="text-slate-200 font-bold truncate max-w-[120px] md:max-w-[200px]" title={pkg.customerName}>{pkg.customerName}</div>
-                                                                                                <div className="text-slate-400 text-[8px] mt-0.5 truncate max-w-[120px] md:max-w-[200px]"><i className="fas fa-phone mr-1"></i>{pkg.customerPhone}</div>
-                                                                                                <div className="text-slate-500 text-[8px] mt-0.5 truncate max-w-[120px] md:max-w-[200px]"><i className="fas fa-motorcycle mr-1"></i>{displayKurir}</div>
-                                                                                            </td>
-                                                                                            <td className="py-2 px-3 text-center whitespace-nowrap">
-                                                                                                <StatusBadgeAdmin status={pkg.status} />
-                                                                                                {isSukses && (
-                                                                                                    <div className={`mt-1 text-[7px] font-bold px-1 py-0.5 rounded border inline-block ${isCair ? 'bg-emerald-900/30 text-emerald-400 border-emerald-800/50' : 'bg-orange-900/30 text-orange-400 border-orange-800/50'}`}>
-                                                                                                        {isCair ? 'TELAH CAIR' : 'BLM CAIR'}
-                                                                                                    </div>
-                                                                                                )}
-                                                                                            </td>
-                                                                                            <td className="py-2 px-3 text-right whitespace-nowrap">
-                                                                                                <div className="text-slate-200 font-bold">{formatCurrency(tagihan)}</div>
-                                                                                                <div className="text-slate-500 text-[8px] font-bold mt-0.5 uppercase">{pkg.metodeBayar || '-'}</div>
-                                                                                            </td>
-                                                                                            <td className="py-2 px-3 text-right whitespace-nowrap">
-                                                                                                <div className={`font-bold ${isSukses ? 'text-emerald-400' : 'text-slate-400'}`}>{formatCurrency(hBarang)}</div>
-                                                                                            </td>
-                                                                                            <td className="py-2 px-3 text-right whitespace-nowrap">
-                                                                                                <div className={`font-bold ${isSukses ? 'text-red-400' : 'text-slate-400'}`} title="Ongkir Dasar">{formatCurrency(oDasar)}</div>
-                                                                                                <div className={`text-[8px] font-bold mt-0.5 ${isSukses ? 'text-orange-400' : 'text-slate-500'}`} title="Tambahan / Volume">+ {formatCurrency(oTambahan)}</div>
-                                                                                            </td>
-                                                                                            <td className="py-2 px-3 text-center whitespace-nowrap align-middle">
-                                                                                                {pkg.fotoBukti ? (
-                                                                                                    <div className="w-7 h-7 mx-auto rounded bg-slate-800 border border-slate-600 overflow-hidden cursor-pointer hover:opacity-80 transition-opacity" onClick={(e) => { e.stopPropagation(); setSelectedImage(`https://www.appsheet.com/template/gettablefileurl?appName=${APPSHEET_APP_ID}&tableName=InputPaket&fileName=${encodeURIComponent(pkg.fotoBukti)}`); }}>
-                                                                                                        <img src={`https://www.appsheet.com/template/gettablefileurl?appName=${APPSHEET_APP_ID}&tableName=InputPaket&fileName=${encodeURIComponent(pkg.fotoBukti)}`} className="w-full h-full object-cover" />
-                                                                                                    </div>
-                                                                                                ) : (
-                                                                                                    <div className="w-7 h-7 mx-auto rounded bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-500 text-[10px]"><i className="fas fa-image"></i></div>
-                                                                                                )}
-                                                                                            </td>
-                                                                                        </tr>
-                                                                                    );
-                                                                                })}
-                                                                            </tbody>
-                                                                        </table>
-                                                                    </div>
-                                                                )}
-                                                            </div>
-                                                        )}
+                                                        <div className="flex-1 flex justify-end items-center gap-4 md:gap-6">
+                                                            <div className="flex flex-col items-end justify-center min-w-[70px]"><span className="text-[8px] font-bold text-emerald-500/70 uppercase tracking-widest mb-0.5">BARANG</span><span className="text-xs md:text-sm font-black text-emerald-400">+{formatCurrency(ol.nilaiBarang)}</span></div>
+                                                            <div className="flex flex-col items-end justify-center min-w-[70px]"><span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">ONGKIR DSR</span><span className="text-xs md:text-sm font-black text-slate-400">{formatCurrency(ol.totalDasar)}</span></div>
+                                                            <div className="flex flex-col items-end justify-center min-w-[70px]"><span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">ONGKIR TMB</span><span className="text-xs md:text-sm font-black text-slate-400">{formatCurrency(ol.totalTambahan)}</span></div>
+                                                            <div className="flex flex-col items-end justify-center min-w-[70px]"><span className="text-[8px] font-bold text-red-500/70 uppercase tracking-widest mb-0.5">POTONGAN TF</span><span className="text-xs md:text-sm font-black text-red-400">-{formatCurrency(ol.potongan)}</span></div>
+                                                            <div className="flex flex-col items-end justify-center min-w-[90px] pl-2 border-l border-slate-700"><span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">TOTAL BERSIH</span><span className={`text-[13px] md:text-[15px] font-black ${ol.pencairan >= 0 ? 'text-[#e65c00]' : 'text-red-500'}`}>{formatCurrency(ol.pencairan)}</span></div>
+                                                            <div className="min-w-[95px] flex justify-end ml-2" onClick={(e) => e.stopPropagation()}>{ol.paketBelumCairIds.length > 0 ? <button onClick={() => openCairkanModal(ol)} className="bg-emerald-500 hover:bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-[10px] font-bold shadow-sm w-full transition-colors flex items-center justify-center"><i className="fas fa-hand-holding-usd mr-1.5"></i> Cairkan ({ol.paketBelumCairIds.length})</button> : <button disabled className="bg-slate-700 text-slate-400 px-3 py-1.5 rounded-lg text-[10px] font-bold w-full border border-slate-600">LUNAS</button>}</div>
+                                                        </div>
                                                     </div>
-                                                );
-                                            })
-                                        )}
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* =========================================================
-                            TAMPILAN TAB 2: LAPORAN KURIR (FLEX GRID SUPER COMPACT)
-                            ========================================================= */}
-                        {activeTab === 'kurir' && (
-                            <div className="bg-[#1e293b] rounded-xl shadow-sm border border-slate-700 overflow-hidden">
-                                <div className="p-3 md:p-4 border-b border-slate-700 bg-slate-800/50 flex justify-between items-center">
-                                    <h3 className="font-bold text-slate-200 text-xs md:text-sm">Rekapitulasi Uang Setoran Kurir <span className="text-[10px] text-slate-400 font-normal ml-2">(Klik baris untuk rincian bawaan)</span></h3>
-                                </div>
-                                
-                                <div className="overflow-x-auto scrollbar-hide">
-                                    <div className="min-w-[1050px] flex flex-col">
-                                        {kurirReport.length === 0 ? (
-                                            <div className="p-8 text-center text-slate-500">Tidak ada kinerja kurir di periode/status ini.</div>
-                                        ) : (
-                                            kurirReport.map((kur, idx) => {
-                                                const isExpanded = expandedKurirs.includes(kur.name);
-                                                const currentFilter = kurirFilters[kur.name] || 'semua';
-                                                
-                                                const displayedPaket = kur.paketTerkait.filter(pkg => {
-                                                    if (currentFilter === 'semua') return true;
-                                                    let stat = String(pkg.status).toLowerCase().replace(' ', '_');
-                                                    if (currentFilter === 'proses') return stat === 'siap_antar' || stat === 'proses';
-                                                    return stat === currentFilter;
-                                                });
-
-                                                return (
-                                                    <div key={idx} className="flex flex-col border-b border-slate-700/50 hover:bg-slate-800/30 transition-colors">
-                                                        
-                                                        {/* BARIS UTAMA KURIR (GRID SUPER COMPACT) */}
-                                                        <div 
-                                                            className="flex items-center justify-between p-3 md:p-4 cursor-pointer"
-                                                            onClick={() => toggleKurir(kur.name)}
-                                                        >
-                                                            {/* Bagian Kiri: Nama & Badge */}
-                                                            <div className="flex items-center gap-2.5 w-[200px] md:w-[250px] shrink-0">
-                                                                <div className={`w-5 h-5 rounded flex items-center justify-center transition-transform ${isExpanded ? 'bg-blue-500 text-white rotate-180' : 'bg-slate-700 text-slate-400'}`}>
-                                                                    <i className="fas fa-chevron-down text-[10px]"></i>
-                                                                </div>
-                                                                <i className="fas fa-motorcycle text-blue-400/80"></i>
-                                                                <span className="font-bold text-slate-200 uppercase truncate text-xs md:text-sm">{kur.name}</span>
-                                                                <span className="text-[9px] bg-slate-700 text-slate-300 px-2 py-0.5 rounded shrink-0 font-bold">{kur.paketTerkait.length} Pkt</span>
-                                                            </div>
-                                                            
-                                                            {/* Bagian Kanan: Matrix Keuangan Dalam 1 Baris */}
-                                                            <div className="flex-1 flex justify-end items-center gap-4 md:gap-5">
-                                                                <div className="flex flex-col items-end justify-center min-w-[70px]">
-                                                                    <span className="text-[8px] font-bold text-emerald-500/70 uppercase tracking-widest mb-0.5">CASH</span>
-                                                                    <span className="text-xs md:text-sm font-black text-emerald-400">+{formatCurrency(kur.rincianCash)}</span>
-                                                                </div>
-                                                                <div className="flex flex-col items-end justify-center min-w-[70px]">
-                                                                    <span className="text-[8px] font-bold text-blue-500/70 uppercase tracking-widest mb-0.5">TF OLSHOP</span>
-                                                                    <span className="text-xs md:text-sm font-black text-blue-400">{formatCurrency(kur.totalTfOlshop)}</span>
-                                                                </div>
-                                                                <div className="flex flex-col items-end justify-center min-w-[70px]">
-                                                                    <span className="text-[8px] font-bold text-purple-500/70 uppercase tracking-widest mb-0.5">TF KANTOR</span>
-                                                                    <span className="text-xs md:text-sm font-black text-purple-400">{formatCurrency(kur.totalTfKantor)}</span>
-                                                                </div>
-                                                                <div className="flex flex-col items-end justify-center min-w-[70px]">
-                                                                    <span className="text-[8px] font-bold text-red-500/70 uppercase tracking-widest mb-0.5">MIN ONGKIR</span>
-                                                                    <span className="text-xs md:text-sm font-black text-red-400">-{formatCurrency(kur.rincianMinusTf)}</span>
-                                                                </div>
-                                                                <div className="flex flex-col items-end justify-center min-w-[70px]">
-                                                                    <span className="text-[8px] font-bold text-orange-500/70 uppercase tracking-widest mb-0.5">ONGKIR TAMB</span>
-                                                                    <span className="text-xs md:text-sm font-black text-orange-400">+{formatCurrency(kur.totalTambahanOngkir)}</span>
-                                                                </div>
-                                                                <div className="flex flex-col items-end justify-center min-w-[80px] pl-2 border-l border-slate-700">
-                                                                    <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">WAJIB SETOR</span>
-                                                                    <span className={`text-[13px] md:text-[15px] font-black ${kur.setoran >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>{formatCurrency(kur.setoran)}</span>
+                                                    {isExpanded && (
+                                                        <div className="p-3 md:p-4 bg-[#0f172a]/60 animate-fade-in-down border-t border-slate-700/50">
+                                                            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-3 gap-3">
+                                                                <h4 className="text-slate-400 font-bold text-[10px] uppercase tracking-widest flex items-center"><i className="fas fa-boxes mr-2"></i>Rincian Resi: {ol.name}</h4>
+                                                                <div className="flex flex-wrap gap-1.5">
+                                                                    {[{id:'semua', label:'Semua'}, {id:'sukses', label:'Sukses'}, {id:'proses', label:'Proses'}, {id:'pending', label:'Pending'}, {id:'cancel', label:'Cancel'}].map(f => (
+                                                                        <button key={f.id} onClick={(e) => { e.stopPropagation(); setOlshopFilters(prev => ({...prev, [ol.name]: f.id})); }} className={`px-2.5 py-1 rounded text-[9px] font-bold uppercase transition-colors border ${currentFilter === f.id ? 'bg-[#e65c00] text-white border-[#e65c00]' : 'bg-slate-800 text-slate-400 border-slate-600 hover:bg-slate-700'}`}>{f.label}</button>
+                                                                    ))}
                                                                 </div>
                                                             </div>
-                                                        </div>
-
-                                                        {/* RINCIAN DALAM (TABEL 1 BARIS) */}
-                                                        {isExpanded && (
-                                                            <div className="p-3 md:p-4 bg-[#0f172a]/60 animate-fade-in-down border-t border-slate-700/50">
-                                                                <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-3 gap-3">
-                                                                    <h4 className="text-slate-400 font-bold text-[10px] uppercase tracking-widest flex items-center"><i className="fas fa-boxes mr-2"></i>Rincian Bawaan: {kur.name}</h4>
-                                                                    <div className="flex flex-wrap gap-1.5">
-                                                                        {[{id:'semua', label:'Semua'}, {id:'sukses', label:'Sukses'}, {id:'proses', label:'Proses'}, {id:'pending', label:'Pending'}, {id:'cancel', label:'Cancel'}].map(f => (
-                                                                            <button key={f.id} onClick={(e) => { e.stopPropagation(); setKurirFilters(prev => ({...prev, [kur.name]: f.id})); }}
-                                                                                className={`px-2.5 py-1 rounded text-[9px] font-bold uppercase transition-colors border ${currentFilter === f.id ? 'bg-blue-500 text-white border-blue-500' : 'bg-slate-800 text-slate-400 border-slate-600 hover:bg-slate-700'}`}>
-                                                                                {f.label}
-                                                                            </button>
-                                                                        ))}
-                                                                    </div>
-                                                                </div>
-                                                                
-                                                                {displayedPaket.length === 0 ? (
-                                                                    <div className="text-center py-4 text-slate-500 text-xs italic">Tidak ada paket bawaan dengan filter tersebut.</div>
-                                                                ) : (
-                                                                    <div className="overflow-x-auto rounded-lg border border-slate-700/50">
-                                                                        <table className="w-full text-left text-[9px] md:text-[10px]">
-                                                                            <thead className="bg-slate-800 text-slate-400 border-b border-slate-700/50 uppercase tracking-wider">
-                                                                                <tr>
-                                                                                    <th className="py-2 px-3 font-bold">Resi & Tgl</th>
-                                                                                    <th className="py-2 px-3 font-bold">Olshop & Penerima</th>
-                                                                                    <th className="py-2 px-3 font-bold text-center">Status</th>
-                                                                                    <th className="py-2 px-3 font-bold text-right">Tagihan & Mtd</th>
-                                                                                    <th className="py-2 px-3 font-bold text-right">Brg (Hrg)</th>
-                                                                                    <th className="py-2 px-3 font-bold text-right">Ongkir (Dsr+Tmb)</th>
-                                                                                    <th className="py-2 px-3 font-bold text-center">Bukti</th>
-                                                                                </tr>
-                                                                            </thead>
-                                                                            <tbody className="divide-y divide-slate-700/30 bg-[#1e293b]/50">
-                                                                                {displayedPaket.map((pkg, pIdx) => {
-                                                                                    const { hBarang, tagihan, oDasar, oTambahan } = getFinancials(pkg);
-                                                                                    const isSukses = String(pkg.status).toLowerCase() === 'sukses';
-                                                                                    let displayTgl = String(pkg.dateString || pkg.tanggal || '-');
-                                                                                    if (displayTgl !== '-' && displayTgl.includes('T')) displayTgl = displayTgl.split('T')[0];
-
-                                                                                    return (
-                                                                                        <tr key={pIdx} className="hover:bg-slate-700/30 transition-colors">
-                                                                                            <td className="py-2 px-3 whitespace-nowrap">
-                                                                                                <div className="text-[#e65c00] font-mono font-bold bg-orange-900/20 px-1.5 py-0.5 rounded border border-orange-800/30 inline-block">{pkg.packageId}</div>
-                                                                                                <div className="text-slate-500 mt-1 text-[8px]"><i className="far fa-calendar-alt mr-1"></i>{displayTgl}</div>
-                                                                                            </td>
-                                                                                            <td className="py-2 px-3">
-                                                                                                <div className="text-slate-400 text-[8px] mb-0.5 truncate max-w-[120px] md:max-w-[200px]"><i className="fas fa-store mr-1"></i>{pkg.olshopName}</div>
-                                                                                                <div className="text-slate-200 font-bold truncate max-w-[120px] md:max-w-[200px]" title={pkg.customerName}>{pkg.customerName}</div>
-                                                                                                <div className="text-slate-500 text-[8px] mt-0.5 truncate max-w-[120px] md:max-w-[200px]"><i className="fas fa-map-marker-alt mr-1"></i>{pkg.address || '-'}</div>
-                                                                                            </td>
-                                                                                            <td className="py-2 px-3 text-center whitespace-nowrap">
-                                                                                                <StatusBadgeAdmin status={pkg.status} />
-                                                                                            </td>
-                                                                                            <td className="py-2 px-3 text-right whitespace-nowrap">
-                                                                                                <div className="text-slate-200 font-bold">{formatCurrency(tagihan)}</div>
-                                                                                                <div className="text-slate-500 text-[8px] font-bold mt-0.5 uppercase">{pkg.metodeBayar || '-'}</div>
-                                                                                            </td>
-                                                                                            <td className="py-2 px-3 text-right whitespace-nowrap">
-                                                                                                <div className={`font-bold ${isSukses ? 'text-emerald-400' : 'text-slate-400'}`}>{formatCurrency(hBarang)}</div>
-                                                                                            </td>
-                                                                                            <td className="py-2 px-3 text-right whitespace-nowrap">
-                                                                                                <div className={`font-bold ${isSukses ? 'text-red-400' : 'text-slate-400'}`} title="Ongkir Dasar">{formatCurrency(oDasar)}</div>
-                                                                                                <div className={`text-[8px] font-bold mt-0.5 ${isSukses ? 'text-orange-400' : 'text-slate-500'}`} title="Tambahan / Volume">+ {formatCurrency(oTambahan)}</div>
-                                                                                            </td>
-                                                                                            <td className="py-2 px-3 text-center whitespace-nowrap align-middle">
-                                                                                                {pkg.fotoBukti ? (
-                                                                                                    <div className="w-7 h-7 mx-auto rounded bg-slate-800 border border-slate-600 overflow-hidden cursor-pointer hover:opacity-80 transition-opacity" onClick={(e) => { e.stopPropagation(); setSelectedImage(`https://www.appsheet.com/template/gettablefileurl?appName=${APPSHEET_APP_ID}&tableName=InputPaket&fileName=${encodeURIComponent(pkg.fotoBukti)}`); }}>
-                                                                                                        <img src={`https://www.appsheet.com/template/gettablefileurl?appName=${APPSHEET_APP_ID}&tableName=InputPaket&fileName=${encodeURIComponent(pkg.fotoBukti)}`} className="w-full h-full object-cover" />
-                                                                                                    </div>
-                                                                                                ) : (
-                                                                                                    <div className="w-7 h-7 mx-auto rounded bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-500 text-[10px]"><i className="fas fa-image"></i></div>
-                                                                                                )}
-                                                                                            </td>
-                                                                                        </tr>
-                                                                                    );
-                                                                                })}
-                                                                            </tbody>
-                                                                        </table>
-                                                                    </div>
-                                                                )}
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                );
-                                            })
-                                        )}
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* =========================================================
-                            TAMPILAN TAB 3: LAPORAN PROFIT (FLEX GRID SUPER COMPACT)
-                            ========================================================= */}
-                        {activeTab === 'profit' && (
-                            <div className="bg-[#1e293b] rounded-xl shadow-sm border border-slate-700 overflow-hidden">
-                                <div className="p-3 md:p-4 border-b border-slate-700 bg-slate-800/50 flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
-                                    <div>
-                                        <h3 className="font-bold text-slate-200 text-xs md:text-sm">Rincian Profit Bersih Perusahaan <span className="text-[10px] text-slate-400 font-normal ml-1">(Klik baris untuk rincian)</span></h3>
-                                    </div>
-                                    <div className="flex flex-col md:flex-row items-center gap-3 w-full md:w-auto">
-                                        <div className="flex bg-slate-900 rounded-lg p-1 border border-slate-700 w-full md:w-auto">
-                                            <button 
-                                                onClick={() => setProfitViewBy('olshop')} 
-                                                className={`flex-1 px-3 md:px-4 py-1.5 md:py-2 rounded-md text-[10px] md:text-xs font-bold transition-colors ${profitViewBy === 'olshop' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'}`}
-                                            >
-                                                Per Olshop
-                                            </button>
-                                            <button 
-                                                onClick={() => setProfitViewBy('kurir')} 
-                                                className={`flex-1 px-3 md:px-4 py-1.5 md:py-2 rounded-md text-[10px] md:text-xs font-bold transition-colors ${profitViewBy === 'kurir' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'}`}
-                                            >
-                                                Per Kurir
-                                            </button>
-                                        </div>
-                                        <span className="text-[10px] md:text-xs font-bold bg-emerald-900/50 text-emerald-400 px-3 py-2 rounded-lg border border-emerald-800 w-full md:w-auto text-center whitespace-nowrap shadow-inner">
-                                            Total Profit Bersih: {formatCurrency(globalSummary.totalProfit)}
-                                        </span>
-                                    </div>
-                                </div>
-                                
-                                <div className="overflow-x-auto scrollbar-hide">
-                                    <div className="min-w-[600px] flex flex-col">
-                                        {(() => {
-                                            const reportData = profitViewBy === 'olshop' ? olshopReport : kurirReport;
-                                            const filteredData = reportData.filter(item => item.profit > 0).sort((a,b) => b.profit - a.profit);
-                                            
-                                            if (filteredData.length === 0) return <div className="p-8 text-center text-slate-500">Tidak ada profit yang dihasilkan di periode ini.</div>;
-
-                                            return filteredData.map((item, idx) => {
-                                                const uniqueId = profitViewBy + '_' + item.name;
-                                                const isExpanded = expandedProfitItems.includes(uniqueId);
-                                                const suksesPackages = item.paketTerkait.filter(p => String(p.status).toLowerCase() === 'sukses');
-
-                                                return (
-                                                    <div key={idx} className="flex flex-col border-b border-slate-700/50 hover:bg-slate-800/30 transition-colors">
-                                                        
-                                                        {/* BARIS UTAMA PROFIT (GRID SUPER COMPACT) */}
-                                                        <div 
-                                                            className="flex items-center justify-between p-3 md:p-4 cursor-pointer"
-                                                            onClick={() => toggleProfitItem(uniqueId)}
-                                                        >
-                                                            {/* Bagian Kiri: Nama */}
-                                                            <div className="flex items-center gap-2.5 w-[250px] md:w-[350px] shrink-0">
-                                                                <div className={`w-5 h-5 rounded flex items-center justify-center transition-transform ${isExpanded ? 'bg-emerald-500 text-white rotate-180' : 'bg-slate-700 text-slate-400'}`}>
-                                                                    <i className="fas fa-chevron-down text-[10px]"></i>
-                                                                </div>
-                                                                <i className={`fas ${profitViewBy === 'olshop' ? 'fa-store' : 'fa-motorcycle'} text-slate-500`}></i>
-                                                                <span className="font-bold text-slate-200 uppercase truncate text-xs md:text-sm">{item.name}</span>
-                                                            </div>
-                                                            
-                                                            {/* Bagian Kanan: Matrix Keuangan Dalam 1 Baris */}
-                                                            <div className="flex-1 flex justify-end items-center gap-6">
-                                                                <div className="flex flex-col items-end justify-center min-w-[70px]">
-                                                                    <span className="text-[8px] font-bold text-slate-500 uppercase tracking-widest mb-0.5">PKT SUKSES</span>
-                                                                    <span className="bg-emerald-900/40 text-emerald-400 border border-emerald-800 px-2 py-0.5 rounded text-[10px] font-bold"><i className="fas fa-check-circle mr-1"></i>{suksesPackages.length} Pkt</span>
-                                                                </div>
-                                                                <div className="flex flex-col items-end justify-center min-w-[120px] pl-2 border-l border-slate-700">
-                                                                    <span className="text-[8px] font-bold text-emerald-500/70 uppercase tracking-widest mb-0.5">TOTAL PROFIT DIHASILKAN</span>
-                                                                    <span className={`text-[13px] md:text-[15px] font-black text-emerald-400`}>+{formatCurrency(item.profit)}</span>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-
-                                                        {/* RINCIAN DALAM PROFIT (TABEL 1 BARIS) */}
-                                                        {isExpanded && (
-                                                            <div className="p-3 md:p-4 bg-[#0f172a]/60 animate-fade-in-down border-t border-slate-700/50">
-                                                                <div className="flex items-center mb-3">
-                                                                    <h4 className="text-slate-400 font-bold text-[10px] uppercase tracking-widest flex items-center"><i className="fas fa-boxes mr-2"></i>Rincian Profit Resi: {item.name}</h4>
-                                                                </div>
-                                                                
+                                                            {displayedPaket.length === 0 ? <div className="text-center py-4 text-slate-500 text-xs">Tidak ada paket</div> : (
                                                                 <div className="overflow-x-auto rounded-lg border border-slate-700/50">
                                                                     <table className="w-full text-left text-[9px] md:text-[10px]">
                                                                         <thead className="bg-slate-800 text-slate-400 border-b border-slate-700/50 uppercase tracking-wider">
                                                                             <tr>
                                                                                 <th className="py-2 px-3 font-bold">Resi & Tgl</th>
-                                                                                <th className="py-2 px-3 font-bold">Penerima</th>
-                                                                                <th className="py-2 px-3 font-bold">{profitViewBy === 'olshop' ? 'Kurir' : 'Olshop'}</th>
+                                                                                <th className="py-2 px-3 font-bold">Penerima & Kurir</th>
+                                                                                <th className="py-2 px-3 font-bold text-center">Status</th>
                                                                                 <th className="py-2 px-3 font-bold text-right">Tagihan & Mtd</th>
-                                                                                <th className="py-2 px-3 font-bold text-right">Hak Kurir (Tamb)</th>
-                                                                                <th className="py-2 px-3 font-bold text-right text-emerald-400">Profit Bersih</th>
+                                                                                <th className="py-2 px-3 font-bold text-right">Brg (Hrg)</th>
+                                                                                <th className="py-2 px-3 font-bold text-right">Ongkir (Dsr+Tmb)</th>
+                                                                                <th className="py-2 px-3 font-bold text-center">Aksi</th>
                                                                             </tr>
                                                                         </thead>
                                                                         <tbody className="divide-y divide-slate-700/30 bg-[#1e293b]/50">
-                                                                            {suksesPackages.map((pkg, pIdx) => {
+                                                                            {displayedPaket.map((pkg, pIdx) => {
                                                                                 const { hBarang, tagihan, oDasar, oTambahan } = getFinancials(pkg);
-                                                                                
+                                                                                const isCair = String(pkg.statusPencairan).toLowerCase() === 'cair';
+                                                                                const isSukses = String(pkg.status).toLowerCase() === 'sukses';
                                                                                 let displayKurir = String(pkg.kurirId || 'Tanpa Kurir').split('@')[0];
+                                                                                let displayTgl = String(pkg.dateString || pkg.tanggal || '-');
+                                                                                if (displayTgl !== '-' && displayTgl.includes('T')) displayTgl = displayTgl.split('T')[0];
+
+                                                                                return (
+                                                                                    <tr key={pIdx} className="hover:bg-slate-700/30 transition-colors">
+                                                                                        <td className="py-2 px-3 whitespace-nowrap">
+                                                                                            <div className="text-[#e65c00] font-mono font-bold bg-orange-900/20 px-1.5 py-0.5 rounded border border-orange-800/30 inline-block flex items-center">
+                                                                                                {pkg.packageId} 
+                                                                                            </div>
+                                                                                            <div className="text-slate-500 mt-1 text-[8px]"><i className="far fa-calendar-alt mr-1"></i>{displayTgl}</div>
+                                                                                        </td>
+                                                                                        <td className="py-2 px-3">
+                                                                                            <div className="text-slate-200 font-bold truncate max-w-[120px] md:max-w-[200px]">{pkg.customerName}</div>
+                                                                                            <div className="text-slate-400 text-[8px] mt-0.5"><i className="fas fa-phone mr-1"></i>{pkg.customerPhone}</div>
+                                                                                            <div className="text-slate-500 text-[8px] mt-0.5"><i className="fas fa-motorcycle mr-1"></i>{displayKurir}</div>
+                                                                                        </td>
+                                                                                        <td className="py-2 px-3 text-center whitespace-nowrap">
+                                                                                            <StatusBadgeAdmin status={pkg.status} />
+                                                                                            {isSukses && <div className={`mt-1 text-[7px] font-bold px-1 py-0.5 rounded border inline-block ${isCair ? 'bg-emerald-900/30 text-emerald-400 border-emerald-800/50' : 'bg-orange-900/30 text-orange-400 border-orange-800/50'}`}>{isCair ? 'TELAH CAIR' : 'BLM CAIR'}</div>}
+                                                                                        </td>
+                                                                                        <td className="py-2 px-3 text-right whitespace-nowrap">
+                                                                                            <div className="text-slate-200 font-bold">{formatCurrency(tagihan)}</div>
+                                                                                            <div className="text-slate-500 text-[8px] font-bold mt-0.5 uppercase">{pkg.metodeBayar || '-'}</div>
+                                                                                        </td>
+                                                                                        <td className="py-2 px-3 text-right whitespace-nowrap">
+                                                                                            <div className={`font-bold ${isSukses ? 'text-emerald-400' : 'text-slate-400'}`}>{formatCurrency(hBarang)}</div>
+                                                                                        </td>
+                                                                                        <td className="py-2 px-3 text-right whitespace-nowrap">
+                                                                                            <div className={`font-bold ${isSukses ? 'text-red-400' : 'text-slate-400'}`}>{formatCurrency(oDasar)}</div>
+                                                                                            <div className={`text-[8px] font-bold mt-0.5 ${isSukses ? 'text-orange-400' : 'text-slate-500'}`}>+ {formatCurrency(oTambahan)}</div>
+                                                                                        </td>
+                                                                                        <td className="py-2 px-3 text-center whitespace-nowrap align-middle">
+                                                                                            <div className="flex items-center justify-center gap-2">
+                                                                                                {/* TOMBOL EDIT RESI (BARU) */}
+                                                                                                <button onClick={(e) => { e.stopPropagation(); openEditModal(pkg); }} className="w-7 h-7 rounded bg-blue-900/40 border border-blue-700/50 text-blue-400 hover:bg-blue-600 hover:text-white transition-colors flex items-center justify-center" title="Edit Harga/Data">
+                                                                                                    <i className="fas fa-edit text-[10px]"></i>
+                                                                                                </button>
+
+                                                                                                {pkg.fotoBukti ? (
+                                                                                                    <div className="w-7 h-7 rounded bg-slate-800 border border-slate-600 overflow-hidden cursor-pointer hover:opacity-80 transition-opacity" onClick={(e) => { e.stopPropagation(); setSelectedImage(`https://www.appsheet.com/template/gettablefileurl?appName=${APPSHEET_APP_ID}&tableName=InputPaket&fileName=${encodeURIComponent(pkg.fotoBukti)}`); }}>
+                                                                                                        <img src={`https://www.appsheet.com/template/gettablefileurl?appName=${APPSHEET_APP_ID}&tableName=InputPaket&fileName=${encodeURIComponent(pkg.fotoBukti)}`} className="w-full h-full object-cover" />
+                                                                                                    </div>
+                                                                                                ) : (
+                                                                                                    <div className="w-7 h-7 rounded bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-500 text-[10px]"><i className="fas fa-image"></i></div>
+                                                                                                )}
+                                                                                            </div>
+                                                                                        </td>
+                                                                                    </tr>
+                                                                                );
+                                                                            })}
+                                                                        </tbody>
+                                                                    </table>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* ==================== TAB 2: KURIR ==================== */}
+                        {activeTab === 'kurir' && (
+                            <div className="bg-[#1e293b] rounded-xl shadow-sm border border-slate-700 overflow-hidden">
+                                <div className="p-3 md:p-4 border-b border-slate-700 bg-slate-800/50 flex justify-between items-center">
+                                    <h3 className="font-bold text-slate-200 text-xs md:text-sm">Rekapitulasi Uang Setoran Kurir</h3>
+                                </div>
+                                <div className="overflow-x-auto scrollbar-hide">
+                                    <div className="min-w-[1050px] flex flex-col">
+                                        {kurirReport.length === 0 ? <div className="p-8 text-center text-slate-500">Tidak ada data kurir</div> : kurirReport.map((kur, idx) => {
+                                            const isExpanded = expandedKurirs.includes(kur.name);
+                                            const currentFilter = kurirFilters[kur.name] || 'semua';
+                                            const displayedPaket = kur.paketTerkait.filter(pkg => {
+                                                if (currentFilter === 'semua') return true;
+                                                let stat = String(pkg.status).toLowerCase().replace(' ', '_');
+                                                if (currentFilter === 'proses') return stat === 'siap_antar' || stat === 'proses';
+                                                return stat === currentFilter;
+                                            });
+
+                                            return (
+                                                <div key={idx} className="flex flex-col border-b border-slate-700/50 hover:bg-slate-800/30 transition-colors">
+                                                    <div className="flex items-center justify-between p-3 md:p-4 cursor-pointer" onClick={() => toggleKurir(kur.name)}>
+                                                        <div className="flex items-center gap-2.5 w-[200px] md:w-[250px] shrink-0">
+                                                            <div className={`w-5 h-5 rounded flex items-center justify-center transition-transform ${isExpanded ? 'bg-blue-500 text-white rotate-180' : 'bg-slate-700 text-slate-400'}`}><i className="fas fa-chevron-down text-[10px]"></i></div>
+                                                            <i className="fas fa-motorcycle text-blue-400/80"></i>
+                                                            <span className="font-bold text-slate-200 uppercase truncate text-xs md:text-sm">{kur.name}</span>
+                                                            <span className="text-[9px] bg-slate-700 text-slate-300 px-2 py-0.5 rounded shrink-0 font-bold">{kur.paketTerkait.length} Pkt</span>
+                                                        </div>
+                                                        <div className="flex-1 flex justify-end items-center gap-4 md:gap-5">
+                                                            <div className="flex flex-col items-end justify-center min-w-[70px]"><span className="text-[8px] font-bold text-emerald-500/70 uppercase tracking-widest mb-0.5">CASH</span><span className="text-xs md:text-sm font-black text-emerald-400">+{formatCurrency(kur.rincianCash)}</span></div>
+                                                            <div className="flex flex-col items-end justify-center min-w-[70px]"><span className="text-[8px] font-bold text-blue-500/70 uppercase tracking-widest mb-0.5">TF OLSHOP</span><span className="text-xs md:text-sm font-black text-blue-400">{formatCurrency(kur.totalTfOlshop)}</span></div>
+                                                            <div className="flex flex-col items-end justify-center min-w-[70px]"><span className="text-[8px] font-bold text-purple-500/70 uppercase tracking-widest mb-0.5">TF KANTOR</span><span className="text-xs md:text-sm font-black text-purple-400">{formatCurrency(kur.totalTfKantor)}</span></div>
+                                                            <div className="flex flex-col items-end justify-center min-w-[70px]"><span className="text-[8px] font-bold text-red-500/70 uppercase tracking-widest mb-0.5">MIN ONGKIR</span><span className="text-xs md:text-sm font-black text-red-400">-{formatCurrency(kur.rincianMinusTf)}</span></div>
+                                                            <div className="flex flex-col items-end justify-center min-w-[70px]"><span className="text-[8px] font-bold text-orange-500/70 uppercase tracking-widest mb-0.5">ONGKIR TAMB</span><span className="text-xs md:text-sm font-black text-orange-400">+{formatCurrency(kur.totalTambahanOngkir)}</span></div>
+                                                            <div className="flex flex-col items-end justify-center min-w-[80px] pl-2 border-l border-slate-700"><span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">WAJIB SETOR</span><span className={`text-[13px] md:text-[15px] font-black ${kur.setoran >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>{formatCurrency(kur.setoran)}</span></div>
+                                                        </div>
+                                                    </div>
+                                                    {isExpanded && (
+                                                        <div className="p-3 md:p-4 bg-[#0f172a]/60 animate-fade-in-down border-t border-slate-700/50">
+                                                            {displayedPaket.length === 0 ? <div className="text-center py-4 text-slate-500 text-xs">Tidak ada paket.</div> : (
+                                                                <div className="overflow-x-auto rounded-lg border border-slate-700/50">
+                                                                    <table className="w-full text-left text-[9px] md:text-[10px]">
+                                                                        <thead className="bg-slate-800 text-slate-400 border-b border-slate-700/50 uppercase tracking-wider">
+                                                                            <tr>
+                                                                                <th className="py-2 px-3 font-bold">Resi & Tgl</th>
+                                                                                <th className="py-2 px-3 font-bold">Olshop & Penerima</th>
+                                                                                <th className="py-2 px-3 font-bold text-center">Status</th>
+                                                                                <th className="py-2 px-3 font-bold text-right">Tagihan & Mtd</th>
+                                                                                <th className="py-2 px-3 font-bold text-right">Brg (Hrg)</th>
+                                                                                <th className="py-2 px-3 font-bold text-right">Ongkir (Dsr+Tmb)</th>
+                                                                                <th className="py-2 px-3 font-bold text-center">Aksi</th>
+                                                                            </tr>
+                                                                        </thead>
+                                                                        <tbody className="divide-y divide-slate-700/30 bg-[#1e293b]/50">
+                                                                            {displayedPaket.map((pkg, pIdx) => {
+                                                                                const { hBarang, tagihan, oDasar, oTambahan } = getFinancials(pkg);
+                                                                                const isSukses = String(pkg.status).toLowerCase() === 'sukses';
                                                                                 let displayTgl = String(pkg.dateString || pkg.tanggal || '-');
                                                                                 if (displayTgl !== '-' && displayTgl.includes('T')) displayTgl = displayTgl.split('T')[0];
 
@@ -957,21 +730,109 @@
                                                                                             <div className="text-slate-500 mt-1 text-[8px]"><i className="far fa-calendar-alt mr-1"></i>{displayTgl}</div>
                                                                                         </td>
                                                                                         <td className="py-2 px-3">
-                                                                                            <div className="text-slate-200 font-bold truncate max-w-[120px] md:max-w-[200px]" title={pkg.customerName}>{pkg.customerName}</div>
+                                                                                            <div className="text-slate-400 text-[8px] mb-0.5 truncate max-w-[120px] md:max-w-[200px]"><i className="fas fa-store mr-1"></i>{pkg.olshopName}</div>
+                                                                                            <div className="text-slate-200 font-bold truncate max-w-[120px] md:max-w-[200px]">{pkg.customerName}</div>
                                                                                         </td>
-                                                                                        <td className="py-2 px-3">
-                                                                                            <div className="text-slate-400"><i className={`fas ${profitViewBy === 'olshop' ? 'fa-motorcycle' : 'fa-store'} mr-1 text-slate-500`}></i> {profitViewBy === 'olshop' ? displayKurir : pkg.olshopName}</div>
+                                                                                        <td className="py-2 px-3 text-center whitespace-nowrap">
+                                                                                            <StatusBadgeAdmin status={pkg.status} />
                                                                                         </td>
                                                                                         <td className="py-2 px-3 text-right whitespace-nowrap">
                                                                                             <div className="text-slate-200 font-bold">{formatCurrency(tagihan)}</div>
                                                                                             <div className="text-slate-500 text-[8px] font-bold mt-0.5 uppercase">{pkg.metodeBayar || '-'}</div>
                                                                                         </td>
                                                                                         <td className="py-2 px-3 text-right whitespace-nowrap">
-                                                                                            <div className="font-bold text-orange-400">{formatCurrency(oTambahan)}</div>
+                                                                                            <div className={`font-bold ${isSukses ? 'text-emerald-400' : 'text-slate-400'}`}>{formatCurrency(hBarang)}</div>
                                                                                         </td>
                                                                                         <td className="py-2 px-3 text-right whitespace-nowrap">
-                                                                                            <div className="font-black text-emerald-400 text-xs">+{formatCurrency(oDasar)}</div>
+                                                                                            <div className={`font-bold ${isSukses ? 'text-red-400' : 'text-slate-400'}`}>{formatCurrency(oDasar)}</div>
+                                                                                            <div className={`text-[8px] font-bold mt-0.5 ${isSukses ? 'text-orange-400' : 'text-slate-500'}`}>+ {formatCurrency(oTambahan)}</div>
                                                                                         </td>
+                                                                                        <td className="py-2 px-3 text-center whitespace-nowrap align-middle">
+                                                                                            <div className="flex items-center justify-center gap-2">
+                                                                                                <button onClick={(e) => { e.stopPropagation(); openEditModal(pkg); }} className="w-7 h-7 rounded bg-blue-900/40 border border-blue-700/50 text-blue-400 hover:bg-blue-600 hover:text-white transition-colors flex items-center justify-center" title="Edit Harga/Data">
+                                                                                                    <i className="fas fa-edit text-[10px]"></i>
+                                                                                                </button>
+                                                                                                {pkg.fotoBukti ? (
+                                                                                                    <div className="w-7 h-7 rounded bg-slate-800 border border-slate-600 overflow-hidden cursor-pointer hover:opacity-80 transition-opacity" onClick={(e) => { e.stopPropagation(); setSelectedImage(`https://www.appsheet.com/template/gettablefileurl?appName=${APPSHEET_APP_ID}&tableName=InputPaket&fileName=${encodeURIComponent(pkg.fotoBukti)}`); }}><img src={`https://www.appsheet.com/template/gettablefileurl?appName=${APPSHEET_APP_ID}&tableName=InputPaket&fileName=${encodeURIComponent(pkg.fotoBukti)}`} className="w-full h-full object-cover" /></div>
+                                                                                                ) : (
+                                                                                                    <div className="w-7 h-7 rounded bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-500 text-[10px]"><i className="fas fa-image"></i></div>
+                                                                                                )}
+                                                                                            </div>
+                                                                                        </td>
+                                                                                    </tr>
+                                                                                );
+                                                                            })}
+                                                                        </tbody>
+                                                                    </table>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* ==================== TAB 3: PROFIT ==================== */}
+                        {activeTab === 'profit' && (
+                            <div className="bg-[#1e293b] rounded-xl shadow-sm border border-slate-700 overflow-hidden">
+                                <div className="p-3 md:p-4 border-b border-slate-700 bg-slate-800/50 flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
+                                    <h3 className="font-bold text-slate-200 text-xs md:text-sm">Rincian Profit Bersih Perusahaan</h3>
+                                    <div className="flex flex-col md:flex-row items-center gap-3 w-full md:w-auto">
+                                        <div className="flex bg-slate-900 rounded-lg p-1 border border-slate-700 w-full md:w-auto">
+                                            <button onClick={() => setProfitViewBy('olshop')} className={`flex-1 px-3 md:px-4 py-1.5 md:py-2 rounded-md text-[10px] md:text-xs font-bold transition-colors ${profitViewBy === 'olshop' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'}`}>Per Olshop</button>
+                                            <button onClick={() => setProfitViewBy('kurir')} className={`flex-1 px-3 md:px-4 py-1.5 md:py-2 rounded-md text-[10px] md:text-xs font-bold transition-colors ${profitViewBy === 'kurir' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'}`}>Per Kurir</button>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="overflow-x-auto scrollbar-hide">
+                                    <div className="min-w-[600px] flex flex-col">
+                                        {(() => {
+                                            const reportData = profitViewBy === 'olshop' ? olshopReport : kurirReport;
+                                            const filteredData = reportData.filter(item => item.profit > 0).sort((a,b) => b.profit - a.profit);
+                                            if (filteredData.length === 0) return <div className="p-8 text-center text-slate-500">Tidak ada profit</div>;
+                                            return filteredData.map((item, idx) => {
+                                                const uniqueId = profitViewBy + '_' + item.name;
+                                                const isExpanded = expandedProfitItems.includes(uniqueId);
+                                                const suksesPackages = item.paketTerkait.filter(p => String(p.status).toLowerCase() === 'sukses');
+                                                return (
+                                                    <div key={idx} className="flex flex-col border-b border-slate-700/50 hover:bg-slate-800/30 transition-colors">
+                                                        <div className="flex items-center justify-between p-3 md:p-4 cursor-pointer" onClick={() => toggleProfitItem(uniqueId)}>
+                                                            <div className="flex items-center gap-2.5 w-[250px] md:w-[350px] shrink-0">
+                                                                <div className={`w-5 h-5 rounded flex items-center justify-center transition-transform ${isExpanded ? 'bg-emerald-500 text-white rotate-180' : 'bg-slate-700 text-slate-400'}`}><i className="fas fa-chevron-down text-[10px]"></i></div>
+                                                                <i className={`fas ${profitViewBy === 'olshop' ? 'fa-store' : 'fa-motorcycle'} text-slate-500`}></i>
+                                                                <span className="font-bold text-slate-200 uppercase truncate text-xs md:text-sm">{item.name}</span>
+                                                            </div>
+                                                            <div className="flex-1 flex justify-end items-center gap-6">
+                                                                <div className="flex flex-col items-end justify-center min-w-[70px]"><span className="text-[8px] font-bold text-slate-500 uppercase tracking-widest mb-0.5">PKT SUKSES</span><span className="bg-emerald-900/40 text-emerald-400 border border-emerald-800 px-2 py-0.5 rounded text-[10px] font-bold"><i className="fas fa-check-circle mr-1"></i>{suksesPackages.length} Pkt</span></div>
+                                                                <div className="flex flex-col items-end justify-center min-w-[120px] pl-2 border-l border-slate-700"><span className="text-[8px] font-bold text-emerald-500/70 uppercase tracking-widest mb-0.5">TOTAL PROFIT</span><span className={`text-[13px] md:text-[15px] font-black text-emerald-400`}>+{formatCurrency(item.profit)}</span></div>
+                                                            </div>
+                                                        </div>
+                                                        {isExpanded && (
+                                                            <div className="p-3 md:p-4 bg-[#0f172a]/60 animate-fade-in-down border-t border-slate-700/50">
+                                                                <div className="overflow-x-auto rounded-lg border border-slate-700/50">
+                                                                    <table className="w-full text-left text-[9px] md:text-[10px]">
+                                                                        <thead className="bg-slate-800 text-slate-400 border-b border-slate-700/50 uppercase tracking-wider">
+                                                                            <tr>
+                                                                                <th className="py-2 px-3 font-bold">Resi & Tgl</th>
+                                                                                <th className="py-2 px-3 font-bold">Penerima</th>
+                                                                                <th className="py-2 px-3 font-bold text-right">Tagihan & Mtd</th>
+                                                                                <th className="py-2 px-3 font-bold text-right text-emerald-400">Profit Bersih</th>
+                                                                            </tr>
+                                                                        </thead>
+                                                                        <tbody className="divide-y divide-slate-700/30 bg-[#1e293b]/50">
+                                                                            {suksesPackages.map((pkg, pIdx) => {
+                                                                                const { hBarang, tagihan, oDasar } = getFinancials(pkg);
+                                                                                let displayTgl = String(pkg.dateString || pkg.tanggal || '-').split('T')[0];
+                                                                                return (
+                                                                                    <tr key={pIdx} className="hover:bg-slate-700/30 transition-colors">
+                                                                                        <td className="py-2 px-3 whitespace-nowrap"><div className="text-[#e65c00] font-mono font-bold bg-orange-900/20 px-1.5 py-0.5 rounded border border-orange-800/30 inline-block">{pkg.packageId}</div><div className="text-slate-500 mt-1 text-[8px]">{displayTgl}</div></td>
+                                                                                        <td className="py-2 px-3"><div className="text-slate-200 font-bold truncate max-w-[120px]">{pkg.customerName}</div></td>
+                                                                                        <td className="py-2 px-3 text-right"><div className="text-slate-200 font-bold">{formatCurrency(tagihan)}</div><div className="text-slate-500 text-[8px] font-bold mt-0.5 uppercase">{pkg.metodeBayar || '-'}</div></td>
+                                                                                        <td className="py-2 px-3 text-right"><div className="font-black text-emerald-400 text-xs">+{formatCurrency(oDasar)}</div></td>
                                                                                     </tr>
                                                                                 );
                                                                             })}
@@ -991,8 +852,67 @@
                     </div>
 
                     {/* =========================================================
-                        MODAL KONFIRMASI PENCAIRAN (FIXED)
+                        MODAL EDIT DATA / REVISI HARGA
                         ========================================================= */}
+                    {editingPkg && (
+                        <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in-down">
+                            <div className="bg-[#1e293b] rounded-2xl border border-slate-700 shadow-2xl w-full max-w-sm overflow-hidden">
+                                <div className="p-4 border-b border-slate-700 bg-slate-800 flex justify-between items-center">
+                                    <h3 className="font-bold text-white text-sm"><i className="fas fa-edit text-blue-500 mr-2"></i> Edit Revisi Harga</h3>
+                                    <button onClick={() => setEditingPkg(null)} className="text-slate-400 hover:text-white transition-colors"><i className="fas fa-times"></i></button>
+                                </div>
+                                
+                                <form onSubmit={handleSaveEdit} className="p-5">
+                                    <div className="mb-4">
+                                        <p className="text-xs text-slate-400 mb-1 uppercase tracking-wider font-bold">Nomor Resi</p>
+                                        <p className="text-base font-black text-[#e65c00] bg-slate-900 p-2 rounded-lg border border-slate-700">{editingPkg.packageId}</p>
+                                    </div>
+
+                                    <div className="space-y-4">
+                                        <div>
+                                            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Total Tagihan (Customer)</label>
+                                            <div className="relative">
+                                                <span className="absolute left-3 top-2 text-slate-500 font-bold text-sm">Rp</span>
+                                                <input type="number" name="totalTagihan" value={editFormData.totalTagihan} onChange={handleEditFormChange} className="w-full bg-slate-900 border border-slate-600 rounded-lg pl-9 pr-3 py-2 text-sm text-white font-bold outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all" required />
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] font-bold text-emerald-500/80 uppercase tracking-widest block mb-1">Harga Barang Bersih</label>
+                                            <div className="relative">
+                                                <span className="absolute left-3 top-2 text-slate-500 font-bold text-sm">Rp</span>
+                                                <input type="number" name="hargaPaket" value={editFormData.hargaPaket} onChange={handleEditFormChange} className="w-full bg-slate-900 border border-emerald-800/50 rounded-lg pl-9 pr-3 py-2 text-sm text-emerald-400 font-bold outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all" required />
+                                            </div>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div>
+                                                <label className="text-[10px] font-bold text-red-400/80 uppercase tracking-widest block mb-1">Ongkir Dasar</label>
+                                                <div className="relative">
+                                                    <span className="absolute left-2.5 top-2 text-slate-500 font-bold text-sm">Rp</span>
+                                                    <input type="number" name="ongkirDasar" value={editFormData.ongkirDasar} onChange={handleEditFormChange} className="w-full bg-slate-900 border border-red-800/50 rounded-lg pl-8 pr-2 py-2 text-sm text-red-400 font-bold outline-none focus:border-red-500 transition-all" />
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <label className="text-[10px] font-bold text-orange-400/80 uppercase tracking-widest block mb-1">Ongkir Tamb/Vol</label>
+                                                <div className="relative">
+                                                    <span className="absolute left-2.5 top-2 text-slate-500 font-bold text-sm">Rp</span>
+                                                    <input type="number" name="tambahanOngkir" value={editFormData.tambahanOngkir} onChange={handleEditFormChange} className="w-full bg-slate-900 border border-orange-800/50 rounded-lg pl-8 pr-2 py-2 text-sm text-orange-400 font-bold outline-none focus:border-orange-500 transition-all" />
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div className="mt-6 flex gap-3">
+                                        <button type="button" onClick={() => setEditingPkg(null)} disabled={isSavingEdit} className="w-1/3 py-2.5 rounded-lg font-bold text-slate-300 bg-slate-700 hover:bg-slate-600 transition-colors text-xs">Batal</button>
+                                        <button type="submit" disabled={isSavingEdit} className="w-2/3 py-2.5 rounded-lg font-bold text-white bg-blue-600 hover:bg-blue-500 transition-colors flex justify-center items-center shadow-lg shadow-blue-900/50 text-xs">
+                                            {isSavingEdit ? <><i className="fas fa-spinner fa-spin mr-2"></i> Menyimpan...</> : <><i className="fas fa-save mr-2"></i> Simpan Revisi</>}
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* MODAL KONFIRMASI PENCAIRAN */}
                     {isCairkanModalOpen && selectedOlshopToCairkan && (
                         <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in-down">
                             <div className="bg-[#1e293b] rounded-2xl border border-slate-700 shadow-2xl w-full max-w-md overflow-hidden">
@@ -1003,24 +923,13 @@
                                 <div className="p-5">
                                     <p className="text-slate-300 text-sm mb-4">Anda akan memproses pencairan dana untuk Olshop berikut:</p>
                                     <div className="bg-slate-900 rounded-xl p-4 border border-slate-700 mb-5">
-                                        <div className="flex justify-between items-center mb-2">
-                                            <span className="text-slate-400 text-xs font-bold uppercase tracking-wider">Nama Olshop</span>
-                                            <span className="text-white font-bold">{selectedOlshopToCairkan.name}</span>
-                                        </div>
-                                        <div className="flex justify-between items-center mb-2">
-                                            <span className="text-slate-400 text-xs font-bold uppercase tracking-wider">Jumlah Paket</span>
-                                            <span className="text-white font-bold bg-slate-700 px-2 py-0.5 rounded text-xs">{selectedOlshopToCairkan.paketBelumCairIds.length} Pkt</span>
-                                        </div>
-                                        <div className="flex justify-between items-center border-t border-slate-700 pt-3 mt-3">
-                                            <span className="text-emerald-500/70 text-xs font-bold uppercase tracking-wider">Total Dana Cair</span>
-                                            <span className="text-emerald-400 font-black text-lg">{formatCurrency(selectedOlshopToCairkan.nominalBelumCair)}</span>
-                                        </div>
+                                        <div className="flex justify-between items-center mb-2"><span className="text-slate-400 text-xs font-bold uppercase tracking-wider">Nama Olshop</span><span className="text-white font-bold">{selectedOlshopToCairkan.name}</span></div>
+                                        <div className="flex justify-between items-center mb-2"><span className="text-slate-400 text-xs font-bold uppercase tracking-wider">Jumlah Paket</span><span className="text-white font-bold bg-slate-700 px-2 py-0.5 rounded text-xs">{selectedOlshopToCairkan.paketBelumCairIds.length} Pkt</span></div>
+                                        <div className="flex justify-between items-center border-t border-slate-700 pt-3 mt-3"><span className="text-emerald-500/70 text-xs font-bold uppercase tracking-wider">Total Dana Cair</span><span className="text-emerald-400 font-black text-lg">{formatCurrency(selectedOlshopToCairkan.nominalBelumCair)}</span></div>
                                     </div>
                                     <div className="flex gap-3">
                                         <button onClick={() => setIsCairkanModalOpen(false)} disabled={isProcessingCair} className="flex-1 py-2.5 rounded-xl font-bold text-slate-300 bg-slate-700 hover:bg-slate-600 transition-colors">Batal</button>
-                                        <button onClick={handleProsesCairkan} disabled={isProcessingCair} className="flex-1 py-2.5 rounded-xl font-bold text-white bg-emerald-600 hover:bg-emerald-500 transition-colors flex justify-center items-center shadow-lg shadow-emerald-900/50">
-                                            {isProcessingCair ? <><i className="fas fa-spinner fa-spin mr-2"></i> Memproses...</> : 'Ya, Cairkan Sekarang'}
-                                        </button>
+                                        <button onClick={handleProsesCairkan} disabled={isProcessingCair} className="flex-1 py-2.5 rounded-xl font-bold text-white bg-emerald-600 hover:bg-emerald-500 transition-colors flex justify-center items-center shadow-lg shadow-emerald-900/50">{isProcessingCair ? <><i className="fas fa-spinner fa-spin mr-2"></i> Memproses...</> : 'Ya, Cairkan Sekarang'}</button>
                                     </div>
                                 </div>
                             </div>
@@ -1029,18 +938,10 @@
 
                     {/* MODAL FOTO MEMBESAR */}
                     {selectedImage && (
-                        <div 
-                            className="fixed inset-0 z-[999] flex items-center justify-center bg-black/90 backdrop-blur-sm p-4 transition-opacity"
-                            onClick={() => setSelectedImage(null)}
-                        >
+                        <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/90 backdrop-blur-sm p-4 transition-opacity" onClick={() => setSelectedImage(null)}>
                             <div className="relative w-full max-w-lg md:max-w-2xl flex flex-col items-center transform transition-all scale-100" onClick={(e) => e.stopPropagation()}>
-                                <button onClick={() => setSelectedImage(null)} className="absolute -top-12 right-0 text-white bg-red-500/80 hover:bg-red-500 w-10 h-10 rounded-full flex items-center justify-center transition-colors shadow-lg border border-white/20">
-                                    <i className="fas fa-times text-xl"></i>
-                                </button>
+                                <button onClick={() => setSelectedImage(null)} className="absolute -top-12 right-0 text-white bg-red-500/80 hover:bg-red-500 w-10 h-10 rounded-full flex items-center justify-center transition-colors shadow-lg border border-white/20"><i className="fas fa-times text-xl"></i></button>
                                 <img src={selectedImage} alt="Foto Paket Membesar" className="w-full max-h-[80vh] object-contain rounded-xl shadow-2xl border-4 border-white/10 bg-black/50" />
-                                <p className="text-white font-black mt-4 tracking-widest text-sm uppercase flex items-center bg-black/50 px-4 py-2 rounded-full border border-white/10">
-                                    <i className="fas fa-camera mr-2 text-blue-400"></i> FOTO PAKET
-                                </p>
                             </div>
                         </div>
                     )}
