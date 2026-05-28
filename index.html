@@ -298,7 +298,7 @@
                         oReport[olshopName] = { totalSukses: 0, totalProses: 0, totalPending: 0, totalCancel: 0, pencairan: 0, potongan: 0, potonganDasar: 0, potonganTambahan: 0, totalDasar: 0, totalTambahan: 0, nilaiBarang: 0, profit: 0, nominalBelumCair: 0, paketBelumCairIds: [], paketTerkait: [] };
                     }
                     if (!kReport[kurirName]) {
-                        kReport[kurirName] = { totalSukses: 0, totalProses: 0, totalPending: 0, totalCancel: 0, setoran: 0, rincianCash: 0, rincianMinusTf: 0, profit: 0, totalTfOlshop: 0, totalTfKantor: 0, totalTambahanOngkir: 0, paketTerkait: [] };
+                        kReport[kurirName] = { totalSukses: 0, totalProses: 0, totalPending: 0, totalCancel: 0, setoran: 0, rincianCash: 0, rincianMinusTf: 0, profit: 0, totalTfOlshop: 0, totalTfKantor: 0, totalTambahanOngkir: 0, tambahanOngkirCash: 0, tambahanOngkirTF: 0, paketTerkait: [] };
                     }
                     
                     oReport[olshopName].paketTerkait.push(pkg);
@@ -360,11 +360,13 @@
                             if (metode === 'TF KANTOR') kReport[kurirName].totalTfKantor += hBarang;
                             
                             kReport[kurirName].rincianMinusTf += oTotal; // Hanya sbg informasi ongkir yg bypass kurir
+                            kReport[kurirName].tambahanOngkirTF += oTambahan; // Catat hak kurir dari TF
                             setoranKurir = -oTambahan; // INI KUNCINYA: Kantor bayar hak kurir dengan potong tagihan setor
                         } else if (metode === 'CASH' || metode === 'COD') {
                             // Untuk paket CASH, kurir pegang semua uang tunai (Barang + Dasar + Tambahan)
                             const cashDiterima = hBarang + oDasar + oTambahan; 
                             kReport[kurirName].rincianCash += cashDiterima;
+                            kReport[kurirName].tambahanOngkirCash += oTambahan; // Catat hak kurir di CASH
                             
                             // Wajib Setor hanya yang hak Olshop (Barang) + hak Kantor (Ongkir Dasar)
                             // Ongkir Tambahan langsung diamankan kurir di kantongnya.
@@ -782,11 +784,9 @@
                                                             <span className="text-[9px] bg-slate-700 text-slate-300 px-2 py-0.5 rounded shrink-0 font-bold">{kur.paketTerkait.length} Pkt</span>
                                                         </div>
                                                         <div className="flex-1 flex justify-end items-center gap-4 md:gap-5">
-                                                            <div className="flex flex-col items-end justify-center min-w-[70px]"><span className="text-[8px] font-bold text-emerald-500/70 uppercase tracking-widest mb-0.5">CASH</span><span className="text-xs md:text-sm font-black text-emerald-400">+{formatCurrency(kur.rincianCash)}</span></div>
-                                                            <div className="flex flex-col items-end justify-center min-w-[70px]"><span className="text-[8px] font-bold text-blue-500/70 uppercase tracking-widest mb-0.5">TF OLSHOP</span><span className="text-xs md:text-sm font-black text-blue-400">{formatCurrency(kur.totalTfOlshop)}</span></div>
-                                                            <div className="flex flex-col items-end justify-center min-w-[70px]"><span className="text-[8px] font-bold text-purple-500/70 uppercase tracking-widest mb-0.5">TF KANTOR</span><span className="text-xs md:text-sm font-black text-purple-400">{formatCurrency(kur.totalTfKantor)}</span></div>
-                                                            <div className="flex flex-col items-end justify-center min-w-[70px]"><span className="text-[8px] font-bold text-red-500/70 uppercase tracking-widest mb-0.5">MIN ONGKIR</span><span className="text-xs md:text-sm font-black text-red-400">-{formatCurrency(kur.rincianMinusTf)}</span></div>
-                                                            <div className="flex flex-col items-end justify-center min-w-[70px]"><span className="text-[8px] font-bold text-orange-500/70 uppercase tracking-widest mb-0.5">ONGKIR TAMB</span><span className="text-xs md:text-sm font-black text-orange-400">+{formatCurrency(kur.totalTambahanOngkir)}</span></div>
+                                                            <div className="flex flex-col items-end justify-center min-w-[70px]"><span className="text-[8px] font-bold text-emerald-500/70 uppercase tracking-widest mb-0.5">UANG CASH</span><span className="text-xs md:text-sm font-black text-emerald-400">+{formatCurrency(kur.rincianCash)}</span></div>
+                                                            <div className="flex flex-col items-end justify-center min-w-[70px]" title="Hak ongkir tambahan kurir dari paket CASH (Langsung dikantongi)"><span className="text-[8px] font-bold text-orange-400/80 uppercase tracking-widest mb-0.5">SIMPAN (CASH)</span><span className="text-xs md:text-sm font-black text-orange-400">-{formatCurrency(kur.tambahanOngkirCash)}</span></div>
+                                                            <div className="flex flex-col items-end justify-center min-w-[70px]" title="Hak ongkir tambahan kurir dari paket TF (Dibayar kantor dengan memotong setoran)"><span className="text-[8px] font-bold text-purple-400/80 uppercase tracking-widest mb-0.5">POTONG (TF)</span><span className="text-xs md:text-sm font-black text-purple-400">-{formatCurrency(kur.tambahanOngkirTF)}</span></div>
                                                             <div className="flex flex-col items-end justify-center min-w-[80px] pl-2 border-l border-slate-700"><span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">WAJIB SETOR</span><span className={`text-[13px] md:text-[15px] font-black ${kur.setoran >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>{formatCurrency(kur.setoran)}</span></div>
                                                         </div>
                                                     </div>
