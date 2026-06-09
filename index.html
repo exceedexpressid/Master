@@ -14,6 +14,8 @@
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
     <!-- Babel -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- SheetJS untuk Ekspor Excel -->
+    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
 
     <style>
         body { touch-action: manipulation; background-color: #0f172a; font-family: 'Segoe UI', system-ui, sans-serif; color: #f8fafc; }
@@ -396,19 +398,17 @@
                         } else { summary.totalDanaCair += pencairan; }
 
                         // ==============================================================
-                        // LOGIKA KURIR (DIPERBAIKI 100% SESUAI MATEMATIKA ANDA)
+                        // LOGIKA SETORAN KURIR FINAL (YANG PALING ADIL)
                         // ==============================================================
                         let setoranKurir = 0;
-                        if (metode === 'TF OLSHOP') {
-                            kReport[kurirName].totalTfOlshop += hBarang;
-                            kReport[kurirName].rincianMinusTf += oTotal;
-                            // Kurir berhak ongkir tambahan, krn tidak pegang uang, maka potong wajib setor
-                            setoranKurir = -oTambahan; 
-                        } else if (metode === 'TF KANTOR') {
-                            kReport[kurirName].totalTfKantor += hBarang;
-                            kReport[kurirName].rincianMinusTf += oTotal;
-                            // Kurir berhak ongkir tambahan, krn tidak pegang uang, maka potong wajib setor
-                            setoranKurir = -oTambahan; 
+                        if (metode === 'TF OLSHOP' || metode === 'TF KANTOR') {
+                            // UPDATE: Menampilkan Total Tagihan (Barang + Ongkir) secara utuh di kolom TF agar sesuai Mutasi Rekening
+                            if (metode === 'TF OLSHOP') kReport[kurirName].totalTfOlshop += (hBarang + oTotal);
+                            if (metode === 'TF KANTOR') kReport[kurirName].totalTfKantor += (hBarang + oTotal);
+                            
+                            kReport[kurirName].rincianMinusTf += oTotal; // Hanya sbg informasi ongkir yg bypass kurir
+                            kReport[kurirName].tambahanOngkirTF += oTambahan; // Catat hak kurir dari TF
+                            setoranKurir = -oTambahan; // INI KUNCINYA: Kantor bayar hak kurir dengan potong tagihan setor
                         } else if (metode === 'CASH' || metode === 'COD') {
                             // Total tunai yg ditarik kurir (Brg + Dsr + Tambahan)
                             kReport[kurirName].rincianCash += (hBarang + oTotal);
@@ -434,6 +434,102 @@
 
                 return { filteredPkgs: pkgs, olshopReport: sortedOlshop, kurirReport: sortedKurir, globalSummary: summary };
             }, [packages, startDate, endDate, globalStatusFilter, searchQuery]);
+
+            // ==========================================
+            // FUNGSI EXPORT EXCEL OTOMATIS
+            // ==========================================
+            const exportToExcel = (data, filename) => {
+                if (typeof XLSX === 'undefined') {
+                    alert('Sistem ekspor Excel sedang dimuat, mohon tunggu sebentar atau muat ulang halaman.');
+                    return;
+                }
+                const worksheet = XLSX.utils.json_to_sheet(data);
+                const workbook = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(workbook, worksheet, "Laporan");
+                XLSX.writeFile(workbook, `${filename}_${new Date().toISOString().slice(0,10)}.xlsx`);
+            };
+
+            const handleDownloadOlshop = () => {
+                const dataToExport = [];
+                olshopReport.forEach(ol => {
+                    ol.paketTerkait.forEach(pkg => {
+                        const { hBarang, tagihan, oDasar, oTambahan } = getFinancials(pkg);
+                        dataToExport.push({
+                            'Nama Olshop': ol.name,
+                            'No Resi': pkg.packageId,
+                            'Tanggal': pkg.dateString ? pkg.dateString.split('T')[0] : '-',
+                            'Nama Penerima': pkg.customerName,
+                            'Status': pkg.status,
+                            'Metode Bayar': pkg.metodeBayar,
+                            'Kurir Pengantar': String(pkg.kurirId || '-').split('@')[0],
+                            'Total Tagihan': tagihan,
+                            'Harga Barang': hBarang,
+                            'Ongkir Dasar': oDasar,
+                            'Ongkir Tambahan': oTambahan,
+                            'Status Pencairan': pkg.statusPencairan || 'Belum Cair'
+                        });
+                    });
+                });
+                exportToExcel(dataToExport, "Laporan_Rincian_Olshop");
+            };
+
+            const handleDownloadKurir = () => {
+                const dataToExport = [];
+                kurirReport.forEach(kur => {
+                    kur.paketTerkait.forEach(pkg => {
+                        const { hBarang, tagihan, oDasar, oTambahan, oTotal } = getFinancials(pkg);
+                        const metode = String(pkg.metodeBayar).trim().toUpperCase();
+                        
+                        let uangCash = 0, tfOlshop = 0, tfKantor = 0, minOngkir = 0, wajibSetor = 0;
+                        
+                        if (String(pkg.status).toLowerCase() === 'sukses') {
+                            if (metode === 'TF OLSHOP') { tfOlshop = hBarang + oTotal; minOngkir = oTotal; wajibSetor = -oTambahan; }
+                            else if (metode === 'TF KANTOR') { tfKantor = hBarang + oTotal; minOngkir = oTotal; wajibSetor = -oTambahan; }
+                            else if (metode === 'CASH' || metode === 'COD') { uangCash = hBarang + oTotal; wajibSetor = hBarang + oDasar; }
+                        }
+
+                        dataToExport.push({
+                            'Nama Kurir': kur.name,
+                            'Toko/Olshop': pkg.olshopName,
+                            'No Resi': pkg.packageId,
+                            'Tanggal': pkg.dateString ? pkg.dateString.split('T')[0] : '-',
+                            'Status': pkg.status,
+                            'Metode Bayar': pkg.metodeBayar,
+                            'Uang Cash (Brg+Ongkir)': uangCash,
+                            'TF Olshop (Brg+Ongkir)': tfOlshop,
+                            'TF Kantor (Brg+Ongkir)': tfKantor,
+                            'Minus Ongkir (Beban TF)': minOngkir,
+                            'Ongkir Tambahan (Hak Kurir)': oTambahan,
+                            'Wajib Setor Kurir': wajibSetor
+                        });
+                    });
+                });
+                exportToExcel(dataToExport, "Laporan_Rincian_Kurir");
+            };
+
+            const handleDownloadProfit = () => {
+                const dataToExport = [];
+                const reportData = profitViewBy === 'olshop' ? olshopReport : kurirReport;
+                const filteredData = reportData.filter(item => item.profit > 0);
+                
+                filteredData.forEach(item => {
+                    const suksesPackages = item.paketTerkait.filter(p => String(p.status).toLowerCase() === 'sukses');
+                    suksesPackages.forEach(pkg => {
+                        const { oDasar, oTambahan } = getFinancials(pkg);
+                        dataToExport.push({
+                            'Tipe Laporan': profitViewBy === 'olshop' ? 'Berdasarkan Olshop' : 'Berdasarkan Kurir',
+                            'Nama (Olshop/Kurir)': item.name,
+                            'No Resi': pkg.packageId,
+                            'Tanggal Sukses': pkg.dateString ? pkg.dateString.split('T')[0] : '-',
+                            'Nama Penerima': pkg.customerName,
+                            'Metode Bayar': pkg.metodeBayar,
+                            'Profit Perusahaan (Ongkir Dasar)': oDasar,
+                            'Ongkir Tambahan (Hak Kurir)': oTambahan
+                        });
+                    });
+                });
+                exportToExcel(dataToExport, "Laporan_Rincian_Profit");
+            };
 
             // KOMPONEN: Lencana Ringkasan Angka
             const SummaryBadgesRow = ({ sukses, proses, pending, cancel }) => (
@@ -605,7 +701,10 @@
                         {activeTab === 'olshop' && (
                             <div className="bg-[#1e293b] rounded-xl shadow-sm border border-slate-700 overflow-hidden">
                                 <div className="p-3 md:p-4 border-b border-slate-700 bg-slate-800/50 flex justify-between items-center">
-                                    <h3 className="font-bold text-slate-200 text-xs md:text-sm">Rekapitulasi Pencairan Olshop <span className="text-[10px] text-slate-400 font-normal ml-2">(Klik baris untuk rincian)</span></h3>
+                                    <h3 className="font-bold text-slate-200 text-xs md:text-sm">Rekapitulasi Pencairan Olshop <span className="text-[10px] text-slate-400 font-normal ml-2 hidden md:inline">(Klik baris untuk rincian)</span></h3>
+                                    <button onClick={handleDownloadOlshop} className="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 rounded-lg text-[10px] md:text-xs font-bold transition-colors shadow-sm flex items-center">
+                                        <i className="fas fa-file-excel mr-1.5"></i> <span className="hidden md:inline">Ekspor Excel</span><span className="md:hidden">Excel</span>
+                                    </button>
                                 </div>
                                 <div className="overflow-x-auto">
                                     <table className="w-full text-left border-collapse text-xs md:text-sm min-w-[650px] md:min-w-[800px]">
@@ -814,7 +913,10 @@
                         {activeTab === 'kurir' && (
                             <div className="bg-[#1e293b] rounded-xl shadow-sm border border-slate-700 overflow-hidden">
                                 <div className="p-3 md:p-4 border-b border-slate-700 bg-slate-800/50 flex justify-between items-center">
-                                    <h3 className="font-bold text-slate-200 text-xs md:text-sm">Rekapitulasi Uang Setoran Kurir <span className="text-[10px] text-slate-400 font-normal ml-2">(Klik baris untuk rincian bawaan)</span></h3>
+                                    <h3 className="font-bold text-slate-200 text-xs md:text-sm">Rekapitulasi Uang Setoran Kurir <span className="text-[10px] text-slate-400 font-normal ml-2 hidden md:inline">(Klik baris untuk rincian bawaan)</span></h3>
+                                    <button onClick={handleDownloadKurir} className="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 rounded-lg text-[10px] md:text-xs font-bold transition-colors shadow-sm flex items-center">
+                                        <i className="fas fa-file-excel mr-1.5"></i> <span className="hidden md:inline">Ekspor Excel</span><span className="md:hidden">Excel</span>
+                                    </button>
                                 </div>
                                 <div className="overflow-x-auto">
                                     <table className="w-full text-left border-collapse text-xs md:text-sm min-w-[800px] md:min-w-[1000px]">
@@ -921,8 +1023,9 @@
                                                                                                     
                                                                                                     oTambahan += oTamb; 
                                                                                                     
-                                                                                                    if (metode === 'TF OLSHOP') { oTfOlshop += hBarang; oMinusOngkir += oTotal; oWajibSetor -= oTamb; }
-                                                                                                    else if (metode === 'TF KANTOR') { oTfKantor += hBarang; oMinusOngkir += oTotal; oWajibSetor -= oTamb;}
+                                                                                                    // UPDATE: Menampilkan Total Tagihan di rincian bawaan kurir
+                                                                                                    if (metode === 'TF OLSHOP') { oTfOlshop += (hBarang + oTotal); oMinusOngkir += oTotal; oWajibSetor -= oTamb; }
+                                                                                                    else if (metode === 'TF KANTOR') { oTfKantor += (hBarang + oTotal); oMinusOngkir += oTotal; oWajibSetor -= oTamb;}
                                                                                                     else if (metode === 'CASH' || metode === 'COD') { oCash += (hBarang + oTotal); oWajibSetor += (hBarang + oDasar); }
                                                                                                 }
                                                                                             });
@@ -1079,8 +1182,8 @@
                         {activeTab === 'profit' && (
                             <div className="bg-[#1e293b] rounded-xl shadow-sm border border-slate-700 overflow-hidden">
                                 <div className="p-3 md:p-4 border-b border-slate-700 bg-slate-800/50 flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
-                                    <div>
-                                        <h3 className="font-bold text-slate-200 text-xs md:text-sm">Rincian Profit Bersih Perusahaan <span className="text-[10px] text-slate-400 font-normal ml-1">(Klik baris untuk rincian)</span></h3>
+                                    <div className="flex justify-between w-full md:w-auto items-center">
+                                        <h3 className="font-bold text-slate-200 text-xs md:text-sm">Rincian Profit Bersih Perusahaan <span className="text-[10px] text-slate-400 font-normal ml-1 hidden md:inline">(Klik baris untuk rincian)</span></h3>
                                     </div>
                                     <div className="flex flex-col md:flex-row items-center gap-3 w-full md:w-auto">
                                         <div className="flex bg-slate-900 rounded-lg p-1 border border-slate-700 w-full md:w-auto">
@@ -1100,6 +1203,9 @@
                                         <span className="text-[10px] md:text-xs font-bold bg-emerald-900/50 text-emerald-400 px-3 py-2 rounded-lg border border-emerald-800 w-full md:w-auto text-center whitespace-nowrap shadow-inner">
                                             Total Profit Bersih: {formatCurrency(globalSummary.totalProfit)}
                                         </span>
+                                        <button onClick={handleDownloadProfit} className="w-full md:w-auto bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-2 rounded-lg text-[10px] md:text-xs font-bold transition-colors shadow-sm flex items-center justify-center">
+                                            <i className="fas fa-file-excel mr-1.5"></i> Ekspor Excel
+                                        </button>
                                     </div>
                                 </div>
                                 
