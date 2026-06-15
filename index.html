@@ -5,24 +5,22 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Master Admin - Exceed Express</title>
     
-    <!-- TAG APLIKASI ANDROID (PWA) -->
+    <!-- PWA Setup & Pendaftaran Service Worker -->
     <link rel="manifest" href="manifest.json">
-    <meta name="theme-color" content="#e65c00">
-    <link rel="apple-touch-icon" href="https://drive.google.com/uc?id=1xBkWoexBfNOe8WKhDp8WBkh7hjvK4Yub">
+    <meta name="theme-color" content="#0f172a">
+    <link rel="apple-touch-icon" href="Logo.png">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <script>
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('sw.js').then(reg => {
-                    console.log('Aplikasi Master PWA terdaftar!', reg.scope);
-                }).catch(err => {
-                    console.log('PWA gagal:', err);
-                });
+                navigator.serviceWorker.register('sw.js')
+                    .then(reg => console.log('PWA Mesin Aktif!', reg.scope))
+                    .catch(err => console.log('PWA Gagal:', err));
             });
         }
     </script>
-
+    
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- FontAwesome -->
@@ -81,7 +79,6 @@
             const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzVHojspm17WSZU42RaMtgiNWJikRfGyTlPh1FczlDJS9JL52PxX0d9RpkNJYM4g424/exec"; 
             const APPSHEET_APP_ID = "APLIKASEXCEED-327461285";
 
-            // State User & UI
             const [isMasterLoggedIn, setIsMasterLoggedIn] = useState(() => loadLocal('exceed_master_logged_in', false));
             const [isLoadingSync, setIsLoadingSync] = useState(false);
             const [syncMessage, setSyncMessage] = useState({ text: '', type: '' });
@@ -108,11 +105,15 @@
             const [selectedOlshopToCairkan, setSelectedOlshopToCairkan] = useState(null);
             const [isProcessingCair, setIsProcessingCair] = useState(false);
 
-            // STATE OPERASIONAL DINAMIS
+            // BIAYA OPERASIONAL DINAMIS
             const [opsCosts, setOpsCosts] = useState(() => loadLocal('exceed_ops_costs', {
                 sewaKos: 0, biayaListrik: 0, biayaWifi: 0, akomodasi: 0, gajiAdmin: 0, lainLain: 0
             }));
+
+            // GAJI POKOK DINAMIS PER KURIR
             const [customSalaries, setCustomSalaries] = useState(() => loadLocal('exceed_custom_salaries', {}));
+
+            // HARI KERJA DINAMIS
             const [workDays, setWorkDays] = useState(() => loadLocal('exceed_work_days', 26));
 
             const handleOpsChange = (field, value) => {
@@ -129,13 +130,6 @@
             useEffect(() => { localStorage.setItem('exceed_ops_costs', JSON.stringify(opsCosts)); }, [opsCosts]);
             useEffect(() => { localStorage.setItem('exceed_custom_salaries', JSON.stringify(customSalaries)); }, [customSalaries]);
             useEffect(() => { localStorage.setItem('exceed_work_days', JSON.stringify(workDays)); }, [workDays]);
-
-            const getFotoUrl = (pkg) => {
-                const fileKey = pkg.fotoBukti || pkg.foto_bukti || pkg.foto || pkg.bukti || pkg.gambar;
-                if (!fileKey || String(fileKey).trim() === '') return null;
-                if (String(fileKey).startsWith('http://') || String(fileKey).startsWith('https://')) return fileKey;
-                return `https://www.appsheet.com/template/gettablefileurl?appName=${APPSHEET_APP_ID}&tableName=InputPaket&fileName=${encodeURIComponent(fileKey)}`;
-            };
 
             const getFinancials = (pkg) => {
                 const hBarang = Number(pkg.hargaPaket) || 0;
@@ -357,7 +351,7 @@
             const targetPerusahaanGlobal = totalBiayaOperasional + totalGajiKurirSeluruhnya;
             const rataRataOngkirGlobal = globalSummary.totalPaketSukses > 0 ? globalSummary.totalProfitPerusahaan / globalSummary.totalPaketSukses : 0;
             const estimasiTargetPaketBulan = rataRataOngkirGlobal > 0 ? Math.ceil(targetPerusahaanGlobal / rataRataOngkirGlobal) : 0;
-            const estimasiTargetPaketHari = workDays > 0 ? Math.ceil(estimasiTargetPaketBulan / workDays) : 0;
+            const estimasiTargetPaketHari = workDays > 0 ? Math.ceil(estimasiTargetPaketBulan / workDays) : 0; 
 
             const StatusBadgeAdmin = ({ status }) => {
                 const s = String(status).toLowerCase();
@@ -420,7 +414,6 @@
 
                     <div className="flex-1 overflow-y-auto p-3 md:p-5 lg:p-6 space-y-4 md:space-y-6 pb-10 max-w-7xl mx-auto w-full">
                         
-                        {/* KONTROL PENCARIAN & FILTER */}
                         <div className="bg-[#1e293b] p-3 md:p-4 rounded-xl shadow-sm border border-slate-700 flex flex-col space-y-3">
                             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 w-full">
                                 <div className="relative w-full md:max-w-sm">
@@ -456,7 +449,6 @@
                             </div>
                         </div>
 
-                        {/* RINGKASAN EKSEKUTIF */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
                             <div className="bg-gradient-to-br from-blue-600 to-blue-800 rounded-xl p-4 md:p-5 text-white shadow-md relative overflow-hidden">
                                 <div className="absolute -right-2 -bottom-4 opacity-20"><i className="fas fa-motorcycle text-[80px]"></i></div>
@@ -472,7 +464,6 @@
                             </div>
                         </div>
 
-                        {/* NAVIGASI TAB */}
                         <div className="flex border-b border-slate-700 space-x-2 md:space-x-6 overflow-x-auto scrollbar-hide">
                             <button onClick={() => setActiveTab('gaji')} className={`shrink-0 pb-3 text-xs md:text-sm font-bold transition-colors ${activeTab === 'gaji' ? 'text-yellow-500 border-b-2 border-yellow-500' : 'text-slate-400 hover:text-slate-300'}`}>
                                 <i className="fas fa-bullseye mr-1.5"></i> Gaji & Target Ops
@@ -488,13 +479,8 @@
                             </button>
                         </div>
 
-                        {/* =========================================================
-                            TAB: TARGET GAJI & BIAYA OPERASIONAL DINAMIS
-                            ========================================================= */}
                         {activeTab === 'gaji' && (
                             <div className="animate-fade-in-down flex flex-col gap-4">
-                                
-                                {/* Papan Ringkasan Global Perusahaan */}
                                 <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 md:gap-4">
                                     <div className="bg-slate-800 p-4 rounded-xl border border-slate-700 shadow-sm col-span-2 lg:col-span-1">
                                         <p className="text-[10px] text-slate-400 font-bold tracking-widest uppercase mb-1">Target Keseluruhan</p>
@@ -543,7 +529,6 @@
                                     </div>
                                 </div>
 
-                                {/* Form Input Biaya Operasional */}
                                 <div className="bg-[#1e293b] rounded-xl shadow-sm border border-slate-700 overflow-hidden">
                                     <div className="p-4 border-b border-slate-700 bg-slate-800/50 flex justify-between items-center">
                                         <div>
@@ -558,32 +543,26 @@
                                         </div>
                                     </div>
                                     <div className="p-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-                                        {/* Input Box: Sewa Kos */}
                                         <div className="flex flex-col">
                                             <label className="text-[10px] font-bold text-slate-400 uppercase mb-1.5 ml-1"><i className="fas fa-home mr-1"></i> Sewa Kos</label>
                                             <input type="number" min="0" value={opsCosts.sewaKos} onChange={(e) => handleOpsChange('sewaKos', e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white font-bold outline-none focus:border-yellow-500 focus:ring-1 focus:ring-yellow-500/50" />
                                         </div>
-                                        {/* Input Box: Listrik */}
                                         <div className="flex flex-col">
                                             <label className="text-[10px] font-bold text-slate-400 uppercase mb-1.5 ml-1"><i className="fas fa-bolt mr-1"></i> Listrik</label>
                                             <input type="number" min="0" value={opsCosts.biayaListrik} onChange={(e) => handleOpsChange('biayaListrik', e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white font-bold outline-none focus:border-yellow-500 focus:ring-1 focus:ring-yellow-500/50" />
                                         </div>
-                                        {/* Input Box: Wifi */}
                                         <div className="flex flex-col">
                                             <label className="text-[10px] font-bold text-slate-400 uppercase mb-1.5 ml-1"><i className="fas fa-wifi mr-1"></i> Internet Wifi</label>
                                             <input type="number" min="0" value={opsCosts.biayaWifi} onChange={(e) => handleOpsChange('biayaWifi', e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white font-bold outline-none focus:border-yellow-500 focus:ring-1 focus:ring-yellow-500/50" />
                                         </div>
-                                        {/* Input Box: Akomodasi */}
                                         <div className="flex flex-col">
                                             <label className="text-[10px] font-bold text-slate-400 uppercase mb-1.5 ml-1"><i className="fas fa-gas-pump mr-1"></i> Akomodasi</label>
                                             <input type="number" min="0" value={opsCosts.akomodasi} onChange={(e) => handleOpsChange('akomodasi', e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white font-bold outline-none focus:border-yellow-500 focus:ring-1 focus:ring-yellow-500/50" />
                                         </div>
-                                        {/* Input Box: Gaji Admin */}
                                         <div className="flex flex-col">
                                             <label className="text-[10px] font-bold text-slate-400 uppercase mb-1.5 ml-1"><i className="fas fa-user-tie mr-1"></i> Gaji Admin</label>
                                             <input type="number" min="0" value={opsCosts.gajiAdmin} onChange={(e) => handleOpsChange('gajiAdmin', e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white font-bold outline-none focus:border-yellow-500 focus:ring-1 focus:ring-yellow-500/50" />
                                         </div>
-                                        {/* Input Box: Lain-lain */}
                                         <div className="flex flex-col">
                                             <label className="text-[10px] font-bold text-slate-400 uppercase mb-1.5 ml-1"><i className="fas fa-ellipsis-h mr-1"></i> Lain-lain</label>
                                             <input type="number" min="0" value={opsCosts.lainLain} onChange={(e) => handleOpsChange('lainLain', e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white font-bold outline-none focus:border-yellow-500 focus:ring-1 focus:ring-yellow-500/50" />
@@ -591,7 +570,6 @@
                                     </div>
                                 </div>
 
-                                {/* Tabel Pencapaian Kurir */}
                                 <div className="bg-[#1e293b] rounded-xl shadow-sm border border-slate-700 overflow-hidden">
                                     <div className="overflow-x-auto scrollbar-hide">
                                         <div className="min-w-[1050px] flex flex-col">
@@ -613,7 +591,7 @@
                                                 const gajiPokokRaw = customSalaries[kur.name] !== undefined ? customSalaries[kur.name] : kur.targetGajiBase;
                                                 const targetGajiFinal = Number(gajiPokokRaw) || 0;
                                                 const targetFinal = targetGajiFinal + bebanOpsPerKurir;
-                                                const pencapaian = kur.profitPerusahaan; // Hanya Ongkir Dasar
+                                                const pencapaian = kur.profitPerusahaan; 
                                                 const isTercapai = pencapaian >= targetFinal;
                                                 const sisaTarget = isTercapai ? 0 : targetFinal - pencapaian;
                                                 
@@ -624,13 +602,11 @@
                                                 return (
                                                     <div key={idx} className="grid grid-cols-[200px_1fr_1fr_130px_130px_120px_120px] gap-4 px-4 py-5 border-b border-slate-700/50 hover:bg-slate-800/30 transition-colors items-center">
                                                         
-                                                        {/* NAMA KURIR */}
                                                         <div className="flex flex-col">
                                                             <span className="font-bold text-slate-200 uppercase truncate text-sm" title={kur.name}>{kur.name}</span>
                                                             <span className="text-[10px] text-slate-500 mt-0.5">{kur.totalSukses} Pkt Selesai</span>
                                                         </div>
 
-                                                        {/* RINCIAN BEBAN TARGET (DENGAN INPUT DINAMIS) */}
                                                         <div className="flex flex-col gap-1 pr-2 border-r border-slate-700/50">
                                                             <div className="flex justify-between items-center text-[10px] mb-0.5">
                                                                 <span className="text-slate-500">Gaji Pokok</span>
@@ -653,7 +629,6 @@
                                                             </div>
                                                         </div>
 
-                                                        {/* PROGRESS BAR */}
                                                         <div className="flex flex-col pr-4">
                                                             <div className="flex justify-between items-end mb-1.5">
                                                                 <span className="text-xs font-black text-emerald-400">{formatCurrency(pencapaian)}</span>
@@ -664,19 +639,16 @@
                                                             </div>
                                                         </div>
 
-                                                        {/* SISA KEKURANGAN */}
                                                         <div className="text-right flex flex-col justify-center">
                                                             <span className={`font-black text-sm ${isTercapai ? 'text-slate-600' : 'text-red-400'}`}>
                                                                 {isTercapai ? '0' : `-${formatCurrency(sisaTarget)}`}
                                                             </span>
                                                         </div>
 
-                                                        {/* RATA RATA ONGKIR KURIR */}
                                                         <div className="text-right font-bold text-slate-300 flex items-center justify-end">
                                                             {formatCurrency(avgOngkir)}
                                                         </div>
 
-                                                        {/* ESTIMASI SISA PAKET */}
                                                         <div className="text-right flex items-center justify-end gap-1.5">
                                                             <span className={`text-xl font-black ${isTercapai ? 'text-slate-600' : 'text-yellow-400'}`}>
                                                                 {isTercapai ? '-' : `${estimasiPaket}`}
@@ -684,7 +656,6 @@
                                                             {!isTercapai && <span className="text-[9px] text-slate-400 font-bold">Pkt</span>}
                                                         </div>
 
-                                                        {/* STATUS BADGE */}
                                                         <div className="text-center">
                                                             {isTercapai ? (
                                                                 <span className="bg-emerald-900/40 text-emerald-400 border border-emerald-500/50 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider shadow-sm flex items-center justify-center">
@@ -693,20 +664,18 @@
                                                             ) : (
                                                                 <span className="bg-slate-800 text-slate-400 border border-slate-600 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider shadow-sm flex items-center justify-center">
                                                                     <i className="fas fa-spinner fa-spin mr-1.5 text-yellow-500"></i> Proses
-                                                            </span>
-                                                        )}
+                                                                </span>
+                                                            )}
+                                                        </div>
                                                     </div>
-                                                </div>
-                                            );
-                                        })}
+                                                );
+                                            })}
+                                        </div>
                                     </div>
                                 </div>
                             </div>
                         )}
 
-                        {/* =========================================================
-                            TAB 1: LAPORAN PROFIT PERUSAHAAN (MURNI ONGKIR DASAR)
-                            ========================================================= */}
                         {activeTab === 'profit' && (
                             <div className="bg-[#1e293b] rounded-xl shadow-sm border border-slate-700 overflow-hidden animate-fade-in-down">
                                 <div className="p-3 md:p-4 border-b border-slate-700 bg-slate-800/50 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -773,9 +742,6 @@
                             </div>
                         )}
 
-                        {/* =========================================================
-                            TAB 3: LAPORAN OLSHOP
-                            ========================================================= */}
                         {activeTab === 'olshop' && (
                             <div className="bg-[#1e293b] rounded-xl shadow-sm border border-slate-700 overflow-hidden animate-fade-in-down">
                                 <div className="p-3 md:p-4 border-b border-slate-700 bg-slate-800/50 flex justify-between items-center">
@@ -800,8 +766,6 @@
                                                 
                                                 return (
                                                     <div key={idx} className="flex flex-col border-b border-slate-700/50 hover:bg-slate-800/30 transition-colors">
-                                                        
-                                                        {/* BARIS UTAMA (GRID SUPER COMPACT) */}
                                                         <div 
                                                             className="flex items-center justify-between p-3 md:p-4 cursor-pointer"
                                                             onClick={() => toggleOlshop(ol.name)}
@@ -947,9 +911,6 @@
                             </div>
                         )}
 
-                        {/* =========================================================
-                            TAB 4: LAPORAN KURIR
-                            ========================================================= */}
                         {activeTab === 'kurir' && (
                             <div className="bg-[#1e293b] rounded-xl shadow-sm border border-slate-700 overflow-hidden animate-fade-in-down">
                                 <div className="p-3 md:p-4 border-b border-slate-700 bg-slate-800/50 flex justify-between items-center">
@@ -963,12 +924,21 @@
                                         ) : (
                                             kurirReport.map((kur, idx) => {
                                                 const isExpanded = expandedKurirs.includes(kur.name);
-                                                        {/* BARIS UTAMA KURIR (GRID SUPER COMPACT) */}
+                                                const currentFilter = kurirFilters[kur.name] || 'semua';
+                                                
+                                                const displayedPaket = kur.paketTerkait.filter(pkg => {
+                                                    if (currentFilter === 'semua') return true;
+                                                    let stat = String(pkg.status).toLowerCase().replace(' ', '_');
+                                                    if (currentFilter === 'proses') return stat === 'siap_antar' || stat === 'proses';
+                                                    return stat === currentFilter;
+                                                });
+
+                                                return (
+                                                    <div key={idx} className="flex flex-col border-b border-slate-700/50 hover:bg-slate-800/30 transition-colors">
                                                         <div 
                                                             className="flex items-center justify-between p-3 md:p-4 cursor-pointer"
                                                             onClick={() => toggleKurir(kur.name)}
                                                         >
-                                                            {/* Bagian Kiri: Nama, Badge & Status */}
                                                             <div className="flex flex-col gap-1 w-[200px] md:w-[300px] shrink-0">
                                                                 <div className="flex items-center gap-2.5">
                                                                     <div className={`w-5 h-5 rounded flex items-center justify-center transition-transform ${isExpanded ? 'bg-blue-500 text-white rotate-180' : 'bg-slate-700 text-slate-400'}`}><i className="fas fa-chevron-down text-[10px]"></i></div>
@@ -976,12 +946,11 @@
                                                                     <span className="font-bold text-slate-200 uppercase truncate text-xs md:text-sm">{kur.name}</span>
                                                                     <span className="text-[9px] bg-slate-700 text-slate-300 px-2 py-0.5 rounded shrink-0 font-bold">{kur.paketTerkait.length} Pkt</span>
                                                                 </div>
-                                                                {/* PENAMBAHAN RINGKASAN STATUS DI BAWAH NAMA */}
-                                                                <div className="flex gap-1.5 ml-7 mt-0.5">
-                                                                    <span className="text-[9px] font-bold text-emerald-400" title="Sukses"><i className="fas fa-check-circle mr-1"></i>{kur.totalSukses}</span>
-                                                                    <span className="text-[9px] font-bold text-blue-400" title="Proses"><i className="fas fa-truck mr-1"></i>{kur.totalProses}</span>
-                                                                    <span className="text-[9px] font-bold text-orange-400" title="Pending"><i className="fas fa-clock mr-1"></i>{kur.totalPending}</span>
-                                                                    <span className="text-[9px] font-bold text-red-400" title="Cancel"><i className="fas fa-times-circle mr-1"></i>{kur.totalCancel}</span>
+                                                                <div className="flex gap-2 ml-7 mt-0.5">
+                                                                    <span className="text-[9px] text-emerald-400 font-bold" title="Sukses"><i className="fas fa-check-circle mr-1"></i>{kur.totalSukses}</span>
+                                                                    <span className="text-[9px] text-blue-400 font-bold" title="Proses"><i className="fas fa-truck mr-1"></i>{kur.totalProses}</span>
+                                                                    <span className="text-[9px] text-orange-400 font-bold" title="Pending"><i className="fas fa-clock mr-1"></i>{kur.totalPending}</span>
+                                                                    <span className="text-[9px] text-red-400 font-bold" title="Cancel"><i className="fas fa-times-circle mr-1"></i>{kur.totalCancel}</span>
                                                                 </div>
                                                             </div>
                                                             <div className="flex-1 flex justify-end items-center gap-4 md:gap-5">
@@ -1081,7 +1050,6 @@
                         )}
                     </div>
 
-                    {/* MODAL KONFIRMASI PENCAIRAN */}
                     {isCairkanModalOpen && selectedOlshopToCairkan && (
                         <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in-down">
                             <div className="bg-[#1e293b] rounded-2xl border border-slate-700 shadow-2xl w-full max-w-md overflow-hidden">
@@ -1116,7 +1084,6 @@
                         </div>
                     )}
 
-                    {/* MODAL FOTO */}
                     {selectedImage && (
                         <div 
                             className="fixed inset-0 z-[999] flex items-center justify-center bg-black/90 backdrop-blur-sm p-4 transition-opacity"
