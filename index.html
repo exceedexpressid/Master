@@ -5,6 +5,24 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Master Admin - Exceed Express</title>
     
+    <!-- TAG APLIKASI ANDROID (PWA) -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#e65c00">
+    <link rel="apple-touch-icon" href="https://drive.google.com/uc?id=1xBkWoexBfNOe8WKhDp8WBkh7hjvK4Yub">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('sw.js').then(reg => {
+                    console.log('Aplikasi Master PWA terdaftar!', reg.scope);
+                }).catch(err => {
+                    console.log('PWA gagal:', err);
+                });
+            });
+        }
+    </script>
+
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- FontAwesome -->
@@ -53,11 +71,9 @@
 
         const getTargetGaji = (kurirName) => {
             const name = String(kurirName).toLowerCase();
-            // Target dasar (gaji) khusus untuk Hamdan dan Agoy
             if (name.includes('hamdan') || name.includes('agoy')) {
                 return 5600000;
             }
-            // Target dasar untuk kurir lainnya
             return 4100000;
         };
 
@@ -75,13 +91,12 @@
 
             const [packages, setPackages] = useState(() => loadLocal('exceed_master_packages', []));
             
-            // State Filter Global
             const [searchQuery, setSearchQuery] = useState('');
             const [startDate, setStartDate] = useState('');
             const [endDate, setEndDate] = useState('');
             const [globalStatusFilter, setGlobalStatusFilter] = useState('semua');
             
-            const [activeTab, setActiveTab] = useState('gaji'); // Default ke Tab Gaji & Ops
+            const [activeTab, setActiveTab] = useState('gaji'); 
             
             const [expandedOlshops, setExpandedOlshops] = useState([]); 
             const [olshopFilters, setOlshopFilters] = useState({}); 
@@ -93,15 +108,11 @@
             const [selectedOlshopToCairkan, setSelectedOlshopToCairkan] = useState(null);
             const [isProcessingCair, setIsProcessingCair] = useState(false);
 
-            // STATE UNTUK BIAYA OPERASIONAL DINAMIS
+            // STATE OPERASIONAL DINAMIS
             const [opsCosts, setOpsCosts] = useState(() => loadLocal('exceed_ops_costs', {
                 sewaKos: 0, biayaListrik: 0, biayaWifi: 0, akomodasi: 0, gajiAdmin: 0, lainLain: 0
             }));
-
-            // STATE UNTUK GAJI POKOK DINAMIS PER KURIR
             const [customSalaries, setCustomSalaries] = useState(() => loadLocal('exceed_custom_salaries', {}));
-
-            // STATE UNTUK HARI KERJA DINAMIS
             const [workDays, setWorkDays] = useState(() => loadLocal('exceed_work_days', 26));
 
             const handleOpsChange = (field, value) => {
@@ -113,7 +124,6 @@
             const toggleKurir = (name) => setExpandedKurirs(prev => prev.includes(name) ? prev.filter(n => n !== name) : [...prev, name]);
             const openCairkanModal = (olshop) => { setSelectedOlshopToCairkan(olshop); setIsCairkanModalOpen(true); };
 
-            // Effect Penyimpanan Lokal
             useEffect(() => { localStorage.setItem('exceed_master_logged_in', JSON.stringify(isMasterLoggedIn)); }, [isMasterLoggedIn]);
             useEffect(() => { localStorage.setItem('exceed_master_packages', JSON.stringify(packages)); }, [packages]);
             useEffect(() => { localStorage.setItem('exceed_ops_costs', JSON.stringify(opsCosts)); }, [opsCosts]);
@@ -173,7 +183,6 @@
                 if (isMasterLoggedIn && packages.length === 0) { syncData(); }
             }, [isMasterLoggedIn]);
 
-            // UPDATE KREDENSIAL LOGIN BARU
             const handleLogin = async (e) => {
                 e.preventDefault();
                 setSyncMessage({ text: 'Memeriksa kredensial...', type: 'info' });
@@ -286,7 +295,6 @@
                         kReport[kurirName].totalDasarOngkir += oDasar;
                         kReport[kurirName].profitPerusahaan += oDasar; // Profit dasar untuk kurir ini
                         
-                        // Menetapkan base gaji berdasarkan nama kurir
                         kReport[kurirName].targetGajiBase = getTargetGaji(kurirName);
 
                         const isCair = String(pkg.statusPencairan).toLowerCase() === 'cair';
@@ -337,27 +345,19 @@
                 return { filteredPkgs: pkgs, olshopReport: sortedOlshop, kurirReport: sortedKurir, globalSummary: summary };
             }, [packages, startDate, endDate, globalStatusFilter, searchQuery]);
 
-            // ==========================================
-            // KALKULASI DINAMIS OPERASIONAL
-            // ==========================================
             const totalBiayaOperasional = Object.values(opsCosts).reduce((acc, curr) => acc + (Number(curr) || 0), 0);
             const jumlahKurirAktif = kurirReport.length;
-            // Beban operasional ditanggung merata ke semua kurir aktif
             const bebanOpsPerKurir = jumlahKurirAktif > 0 ? totalBiayaOperasional / jumlahKurirAktif : 0;
             
-            // Menghitung total gaji kurir secara dinamis
             const totalGajiKurirSeluruhnya = kurirReport.reduce((acc, kur) => {
                 const gaji = customSalaries[kur.name] !== undefined ? customSalaries[kur.name] : kur.targetGajiBase;
                 return acc + (Number(gaji) || 0);
             }, 0);
 
             const targetPerusahaanGlobal = totalBiayaOperasional + totalGajiKurirSeluruhnya;
-            
             const rataRataOngkirGlobal = globalSummary.totalPaketSukses > 0 ? globalSummary.totalProfitPerusahaan / globalSummary.totalPaketSukses : 0;
-
-            // Estimasi Target Paket
             const estimasiTargetPaketBulan = rataRataOngkirGlobal > 0 ? Math.ceil(targetPerusahaanGlobal / rataRataOngkirGlobal) : 0;
-            const estimasiTargetPaketHari = workDays > 0 ? Math.ceil(estimasiTargetPaketBulan / workDays) : 0; // Menggunakan hari kerja dinamis
+            const estimasiTargetPaketHari = workDays > 0 ? Math.ceil(estimasiTargetPaketBulan / workDays) : 0;
 
             const StatusBadgeAdmin = ({ status }) => {
                 const s = String(status).toLowerCase();
@@ -367,7 +367,6 @@
                 return <span className="text-blue-400 bg-blue-900/30 px-1.5 py-0.5 rounded text-[8px] md:text-[9px] font-bold uppercase border border-blue-800/50"><i className="fas fa-truck mr-1"></i>Proses</span>;
             };
 
-            // RENDER HALAMAN LOGIN
             if (!isMasterLoggedIn) {
                 return (
                     <div className="min-h-screen flex items-center justify-center bg-[#0f172a] p-4 relative overflow-hidden">
@@ -694,13 +693,12 @@
                                                             ) : (
                                                                 <span className="bg-slate-800 text-slate-400 border border-slate-600 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider shadow-sm flex items-center justify-center">
                                                                     <i className="fas fa-spinner fa-spin mr-1.5 text-yellow-500"></i> Proses
-                                                                </span>
-                                                            )}
-                                                        </div>
+                                                            </span>
+                                                        )}
                                                     </div>
-                                                );
-                                            })}
-                                        </div>
+                                                </div>
+                                            );
+                                        })}
                                     </div>
                                 </div>
                             </div>
@@ -965,26 +963,26 @@
                                         ) : (
                                             kurirReport.map((kur, idx) => {
                                                 const isExpanded = expandedKurirs.includes(kur.name);
-                                                const currentFilter = kurirFilters[kur.name] || 'semua';
-                                                
-                                                const displayedPaket = kur.paketTerkait.filter(pkg => {
-                                                    if (currentFilter === 'semua') return true;
-                                                    let stat = String(pkg.status).toLowerCase().replace(' ', '_');
-                                                    if (currentFilter === 'proses') return stat === 'siap_antar' || stat === 'proses';
-                                                    return stat === currentFilter;
-                                                });
-
-                                                return (
-                                                    <div key={idx} className="flex flex-col border-b border-slate-700/50 hover:bg-slate-800/30 transition-colors">
+                                                        {/* BARIS UTAMA KURIR (GRID SUPER COMPACT) */}
                                                         <div 
                                                             className="flex items-center justify-between p-3 md:p-4 cursor-pointer"
                                                             onClick={() => toggleKurir(kur.name)}
                                                         >
-                                                            <div className="flex items-center gap-2.5 w-[200px] md:w-[250px] shrink-0">
-                                                                <div className={`w-5 h-5 rounded flex items-center justify-center transition-transform ${isExpanded ? 'bg-blue-500 text-white rotate-180' : 'bg-slate-700 text-slate-400'}`}><i className="fas fa-chevron-down text-[10px]"></i></div>
-                                                                <i className="fas fa-motorcycle text-blue-400/80"></i>
-                                                                <span className="font-bold text-slate-200 uppercase truncate text-xs md:text-sm">{kur.name}</span>
-                                                                <span className="text-[9px] bg-slate-700 text-slate-300 px-2 py-0.5 rounded shrink-0 font-bold">{kur.paketTerkait.length} Pkt</span>
+                                                            {/* Bagian Kiri: Nama, Badge & Status */}
+                                                            <div className="flex flex-col gap-1 w-[200px] md:w-[300px] shrink-0">
+                                                                <div className="flex items-center gap-2.5">
+                                                                    <div className={`w-5 h-5 rounded flex items-center justify-center transition-transform ${isExpanded ? 'bg-blue-500 text-white rotate-180' : 'bg-slate-700 text-slate-400'}`}><i className="fas fa-chevron-down text-[10px]"></i></div>
+                                                                    <i className="fas fa-motorcycle text-blue-400/80"></i>
+                                                                    <span className="font-bold text-slate-200 uppercase truncate text-xs md:text-sm">{kur.name}</span>
+                                                                    <span className="text-[9px] bg-slate-700 text-slate-300 px-2 py-0.5 rounded shrink-0 font-bold">{kur.paketTerkait.length} Pkt</span>
+                                                                </div>
+                                                                {/* PENAMBAHAN RINGKASAN STATUS DI BAWAH NAMA */}
+                                                                <div className="flex gap-1.5 ml-7 mt-0.5">
+                                                                    <span className="text-[9px] font-bold text-emerald-400" title="Sukses"><i className="fas fa-check-circle mr-1"></i>{kur.totalSukses}</span>
+                                                                    <span className="text-[9px] font-bold text-blue-400" title="Proses"><i className="fas fa-truck mr-1"></i>{kur.totalProses}</span>
+                                                                    <span className="text-[9px] font-bold text-orange-400" title="Pending"><i className="fas fa-clock mr-1"></i>{kur.totalPending}</span>
+                                                                    <span className="text-[9px] font-bold text-red-400" title="Cancel"><i className="fas fa-times-circle mr-1"></i>{kur.totalCancel}</span>
+                                                                </div>
                                                             </div>
                                                             <div className="flex-1 flex justify-end items-center gap-4 md:gap-5">
                                                                 <div className="flex flex-col items-end justify-center min-w-[70px]"><span className="text-[8px] font-bold text-emerald-500/70 uppercase tracking-widest mb-0.5">UANG CASH</span><span className="text-xs md:text-sm font-black text-emerald-400">+{formatCurrency(kur.rincianCash)}</span></div>
