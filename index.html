@@ -28,8 +28,8 @@
     <!-- React & ReactDOM -->
     <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
-    <!-- Babel -->
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- Babel (Versi Stabil 7.22.20) -->
+    <script src="https://unpkg.com/@babel/standalone@7.22.20/babel.min.js"></script>
 
     <style>
         body { touch-action: manipulation; background-color: #0f172a; font-family: 'Segoe UI', system-ui, sans-serif; color: #f8fafc; }
@@ -56,7 +56,11 @@
 <body class="antialiased text-slate-200">
     <div id="root"></div>
 
-    <script type="text/babel">
+    <!-- Menambahkan env,react dan mantra Pragma agar bebas dari error -->
+    <script type="text/babel" data-presets="env,react">
+        /** @jsx React.createElement */
+        /** @jsxFrag React.Fragment */
+
         const { useState, useEffect, useMemo } = React;
 
         const loadLocal = (key, fallback) => {
@@ -268,7 +272,12 @@
                     
                     const { hBarang, oDasar, oTambahan, oTotal } = getFinancials(pkg);
 
-                    if (!oReport[olshopName]) oReport[olshopName] = { totalSukses: 0, totalProses: 0, totalPending: 0, totalCancel: 0, pencairan: 0, potongan: 0, potonganDasar: 0, potonganTambahan: 0, totalDasar: 0, totalTambahan: 0, nilaiBarang: 0, nominalBelumCair: 0, paketBelumCairIds: [], paketTerkait: [] };
+                    if (!oReport[olshopName]) oReport[olshopName] = { 
+                        totalSukses: 0, totalProses: 0, totalPending: 0, totalCancel: 0, 
+                        pencairan: 0, potongan: 0, potonganDasar: 0, potonganTambahan: 0, 
+                        totalDasar: 0, totalTambahan: 0, nilaiBarang: 0, nominalBelumCair: 0, 
+                        paketBelumCairIds: [], paketBelumCairDetails: [], paketTerkait: [] 
+                    };
                     if (!kReport[kurirName]) kReport[kurirName] = { totalSukses: 0, totalProses: 0, totalPending: 0, totalCancel: 0, setoran: 0, rincianCash: 0, rincianMinusTf: 0, totalTfOlshop: 0, totalTfKantor: 0, totalTambahanOngkir: 0, tambahanOngkirCash: 0, tambahanOngkirTF: 0, paketTerkait: [], totalDasarOngkir: 0, profitPerusahaan: 0, targetGajiBase: 0 };
                     
                     oReport[olshopName].paketTerkait.push(pkg);
@@ -302,9 +311,11 @@
                         if (metode === 'CASH' || metode === 'TF KANTOR' || metode === 'COD') oReport[olshopName].nilaiBarang += hBarang;
                         summary.totalPencairanOlshop += pencairan;
 
+                        // JIKA PAKET BELUM CAIR, SIMPAN DETAILNYA JUGA
                         if (!isCair) {
                             oReport[olshopName].nominalBelumCair += pencairan;
                             oReport[olshopName].paketBelumCairIds.push(pkg.packageId); 
+                            oReport[olshopName].paketBelumCairDetails.push(pkg); // Simpan seluruh objek paket
                             summary.totalDanaBelumCair += pencairan;
                         } else { summary.totalDanaCair += pencairan; }
 
@@ -911,6 +922,7 @@
                             </div>
                         )}
 
+                        {/* KEMBALI DIMASUKKAN: LAPORAN KURIR UTUH */}
                         {activeTab === 'kurir' && (
                             <div className="bg-[#1e293b] rounded-xl shadow-sm border border-slate-700 overflow-hidden animate-fade-in-down">
                                 <div className="p-3 md:p-4 border-b border-slate-700 bg-slate-800/50 flex justify-between items-center">
@@ -1050,6 +1062,7 @@
                         )}
                     </div>
 
+                    {/* MODAL CAIRKAN (Dilengkapi Rincian Customer) */}
                     {isCairkanModalOpen && selectedOlshopToCairkan && (
                         <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in-down">
                             <div className="bg-[#1e293b] rounded-2xl border border-slate-700 shadow-2xl w-full max-w-md overflow-hidden">
@@ -1059,7 +1072,7 @@
                                 </div>
                                 <div className="p-5">
                                     <p className="text-slate-300 text-sm mb-4">Anda akan memproses pencairan dana untuk Olshop berikut:</p>
-                                    <div className="bg-slate-900 rounded-xl p-4 border border-slate-700 mb-5">
+                                    <div className="bg-slate-900 rounded-xl p-4 border border-slate-700 mb-4">
                                         <div className="flex justify-between items-center mb-2">
                                             <span className="text-slate-400 text-xs font-bold uppercase tracking-wider">Nama Olshop</span>
                                             <span className="text-white font-bold">{selectedOlshopToCairkan.name}</span>
@@ -1073,6 +1086,39 @@
                                             <span className="text-emerald-400 font-black text-lg">{formatCurrency(selectedOlshopToCairkan.nominalBelumCair)}</span>
                                         </div>
                                     </div>
+
+                                    {/* DAFTAR RINCIAN PAKET BELUM CAIR (FITUR BARU) */}
+                                    <div className="mb-5">
+                                        <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-2"><i className="fas fa-list-ul mr-1.5"></i> Rincian Paket Belum Cair</h4>
+                                        <div className="max-h-40 overflow-y-auto pr-1 space-y-2 scrollbar-hide">
+                                            {selectedOlshopToCairkan.paketBelumCairDetails.map((pDetail, idx) => {
+                                                let displayTgl = String(pDetail.dateString || pDetail.tanggal || '-');
+                                                if (displayTgl !== '-' && displayTgl.includes('T')) displayTgl = displayTgl.split('T')[0];
+                                                
+                                                const { hBarang, oTotal } = getFinancials(pDetail);
+                                                const mtd = String(pDetail.metodeBayar).trim().toUpperCase();
+                                                let pNominal = 0;
+                                                if (mtd === 'TF OLSHOP') pNominal = -oTotal;
+                                                else if (mtd === 'CASH' || mtd === 'TF KANTOR' || mtd === 'COD') pNominal = hBarang;
+
+                                                return (
+                                                    <div key={idx} className="bg-slate-800 border border-slate-700 rounded-lg p-2.5 flex justify-between items-center">
+                                                        <div className="flex flex-col">
+                                                            <span className="text-xs font-bold text-slate-200">{pDetail.customerName}</span>
+                                                            <div className="flex items-center gap-2 mt-0.5">
+                                                                <span className="text-[9px] font-mono text-emerald-400 bg-emerald-900/20 border border-emerald-800/30 px-1 rounded">{pDetail.packageId}</span>
+                                                                <span className="text-[9px] text-slate-500"><i className="far fa-calendar-alt mr-1"></i>{displayTgl}</span>
+                                                            </div>
+                                                        </div>
+                                                        <span className={`text-xs font-black ${pNominal >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                                                            {formatCurrency(pNominal)}
+                                                        </span>
+                                                    </div>
+                                                )
+                                            })}
+                                        </div>
+                                    </div>
+
                                     <div className="flex gap-3">
                                         <button onClick={() => setIsCairkanModalOpen(false)} disabled={isProcessingCair} className="flex-1 py-2.5 rounded-xl font-bold text-slate-300 bg-slate-700 hover:bg-slate-600 transition-colors">Batal</button>
                                         <button onClick={handleProsesCairkan} disabled={isProcessingCair} className="flex-1 py-2.5 rounded-xl font-bold text-white bg-emerald-600 hover:bg-emerald-500 transition-colors flex justify-center items-center shadow-lg shadow-emerald-900/50">
@@ -1084,6 +1130,7 @@
                         </div>
                     )}
 
+                    {/* MODAL FOTO MEMBESAR */}
                     {selectedImage && (
                         <div 
                             className="fixed inset-0 z-[999] flex items-center justify-center bg-black/90 backdrop-blur-sm p-4 transition-opacity"
