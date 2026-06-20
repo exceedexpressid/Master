@@ -5,21 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Master Admin - Exceed Express</title>
     
-    <!-- PWA Setup & Pendaftaran Service Worker -->
+    <!-- PWA Setup -->
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#0f172a">
     <link rel="apple-touch-icon" href="Logo.png">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <script>
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('sw.js')
-                    .then(reg => console.log('PWA Mesin Aktif!', reg.scope))
-                    .catch(err => console.log('PWA Gagal:', err));
-            });
-        }
-    </script>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -47,16 +36,18 @@
             background-size: 1rem 1rem;
         }
 
-        /* Input Number Hilangkan Panah Spinner */
+        /* Hilangkan Panah Spinner Input Number */
         input[type=number]::-webkit-inner-spin-button, 
         input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
         input[type=number] { -moz-appearance: textfield; }
+        
+        /* Ubah warna panah bawaan Datalist */
+        input::-webkit-calendar-picker-indicator { opacity: 1; filter: invert(0.8); cursor: pointer; }
     </style>
 </head>
 <body class="antialiased text-slate-200">
     <div id="root"></div>
 
-    <!-- Menambahkan env,react dan mantra Pragma agar bebas dari error -->
     <script type="text/babel" data-presets="env,react">
         /** @jsx React.createElement */
         /** @jsxFrag React.Fragment */
@@ -73,9 +64,7 @@
 
         const getTargetGaji = (kurirName) => {
             const name = String(kurirName).toLowerCase();
-            if (name.includes('hamdan') || name.includes('agoy')) {
-                return 5600000;
-            }
+            if (name.includes('hamdan') || name.includes('agoy')) return 5600000;
             return 4100000;
         };
 
@@ -91,13 +80,16 @@
             const [loginPass, setLoginPass] = useState('');
 
             const [packages, setPackages] = useState(() => loadLocal('exceed_master_packages', []));
+            const [masterOlshops, setMasterOlshops] = useState([]);
+            const [masterZonas, setMasterZonas] = useState([]);
+            const [masterKurirs, setMasterKurirs] = useState([]);
             
             const [searchQuery, setSearchQuery] = useState('');
             const [startDate, setStartDate] = useState('');
             const [endDate, setEndDate] = useState('');
             const [globalStatusFilter, setGlobalStatusFilter] = useState('semua');
             
-            const [activeTab, setActiveTab] = useState('gaji'); 
+            const [activeTab, setActiveTab] = useState('olshop'); 
             
             const [expandedOlshops, setExpandedOlshops] = useState([]); 
             const [olshopFilters, setOlshopFilters] = useState({}); 
@@ -105,19 +97,25 @@
             const [kurirFilters, setKurirFilters] = useState({}); 
 
             const [selectedImage, setSelectedImage] = useState(null);
+            
             const [isCairkanModalOpen, setIsCairkanModalOpen] = useState(false);
             const [selectedOlshopToCairkan, setSelectedOlshopToCairkan] = useState(null);
             const [isProcessingCair, setIsProcessingCair] = useState(false);
 
-            // BIAYA OPERASIONAL DINAMIS
-            const [opsCosts, setOpsCosts] = useState(() => loadLocal('exceed_ops_costs', {
-                sewaKos: 0, biayaListrik: 0, biayaWifi: 0, akomodasi: 0, gajiAdmin: 0, lainLain: 0
-            }));
+            // ==========================================
+            // STATE FITUR EDIT PAKET
+            // ==========================================
+            const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+            const [isProcessingEdit, setIsProcessingEdit] = useState(false);
+            const [editModal, setEditModal] = useState({
+                packageId: '', olshopName: '', status: '', metodeBayar: '', 
+                hargaPaket: 0, ongkirKode: '', ongkirDasar: 0, tambahanOngkir: 0, 
+                kurirId: '', tanggal: ''
+            });
 
-            // GAJI POKOK DINAMIS PER KURIR
+            // BIAYA OPERASIONAL & GAJI DINAMIS
+            const [opsCosts, setOpsCosts] = useState(() => loadLocal('exceed_ops_costs', { sewaKos: 0, biayaListrik: 0, biayaWifi: 0, akomodasi: 0, gajiAdmin: 0, lainLain: 0 }));
             const [customSalaries, setCustomSalaries] = useState(() => loadLocal('exceed_custom_salaries', {}));
-
-            // HARI KERJA DINAMIS
             const [workDays, setWorkDays] = useState(() => loadLocal('exceed_work_days', 26));
 
             const handleOpsChange = (field, value) => {
@@ -140,14 +138,21 @@
                 const tagihan = Number(pkg.totalTagihan) || 0;
                 const selisihTagihan = tagihan - hBarang > 0 ? tagihan - hBarang : 0;
                 
-                let oTambahan = Number(pkg.tambahanOngkir) || Number(pkg.ongkirTambahan) || Number(pkg.ongkir_tambahan) || Number(pkg.ongkirVolume) || Number(pkg.tambahan) || 0;
-                let oDasar = Number(pkg.ongkirDasar) || Number(pkg.ongkirReal) || Number(pkg.ongkir) || 0;
+                let oTambahan = Number(pkg.tambahanOngkir) || 0;
+                let oDasar = Number(pkg.ongkirDasar) || 0;
                 
                 if (oTambahan === 0 && oDasar > 0 && selisihTagihan > oDasar) oTambahan = selisihTagihan - oDasar;
                 else if (oTambahan === 0 && oDasar === 0 && selisihTagihan > 0) oDasar = selisihTagihan;
                 if (oDasar === 0 && oTambahan > 0 && selisihTagihan > oTambahan) oDasar = selisihTagihan - oTambahan;
 
                 return { hBarang, tagihan, oDasar, oTambahan, oTotal: oDasar + oTambahan };
+            };
+
+            const getFotoUrl = (pkg) => {
+                const fileKey = pkg.fotoBukti || pkg.foto_bukti || pkg.foto || pkg.bukti || pkg.gambar;
+                if (!fileKey || String(fileKey).trim() === '') return null;
+                if (String(fileKey).startsWith('http://') || String(fileKey).startsWith('https://')) return fileKey;
+                return `https://www.appsheet.com/template/gettablefileurl?appName=${APPSHEET_APP_ID}&tableName=InputPaket&fileName=${encodeURIComponent(fileKey)}`;
             };
 
             const syncData = async (isLoginAttempt = false) => {
@@ -160,8 +165,12 @@
                     
                     if (result.status === 'success') {
                         setPackages(result.data.packages || []);
+                        setMasterOlshops(result.data.olshop || []);
+                        setMasterZonas(result.data.zona || []);
+                        setMasterKurirs(result.data.kurir || []);
+
                         if(!isLoginAttempt) {
-                            setSyncMessage({ text: 'Data berhasil diperbarui secara Real-time!', type: 'success' });
+                            setSyncMessage({ text: 'Data berhasil diperbarui!', type: 'success' });
                             setTimeout(() => setSyncMessage({ text: '', type: '' }), 3000);
                         }
                         return true;
@@ -178,22 +187,20 @@
             };
 
             useEffect(() => {
-                if (isMasterLoggedIn && packages.length === 0) { syncData(); }
+                if (isMasterLoggedIn) { syncData(); }
             }, [isMasterLoggedIn]);
 
             const handleLogin = async (e) => {
                 e.preventDefault();
                 setSyncMessage({ text: 'Memeriksa kredensial...', type: 'info' });
-
                 const validUser1 = loginUname === 'ellyasma991' && loginPass === '082213663662';
                 const validUser2 = loginUname === 'idypandu' && loginPass === '082257849332';
-
                 if (validUser1 || validUser2) {
                     setIsMasterLoggedIn(true);
                     setLoginUname(''); setLoginPass('');
                     syncData();
                 } else {
-                    setSyncMessage({ text: 'Akses Ditolak! Username atau Password Salah.', type: 'error' });
+                    setSyncMessage({ text: 'Username atau Password Salah.', type: 'error' });
                 }
             };
 
@@ -203,32 +210,90 @@
                 if (!selectedOlshopToCairkan || selectedOlshopToCairkan.paketBelumCairIds.length === 0) return;
                 setIsProcessingCair(true);
                 setSyncMessage({ text: `Memproses pencairan ${selectedOlshopToCairkan.name}...`, type: 'info' });
-                
                 try {
                     const formData = new URLSearchParams();
                     formData.append('action', 'cairkanPaket');
                     formData.append('packageIds', JSON.stringify(selectedOlshopToCairkan.paketBelumCairIds));
-
                     const response = await fetch(SCRIPT_URL, { method: 'POST', body: formData, headers: { 'Content-Type': 'application/x-www-form-urlencoded' } });
                     const result = await response.json();
-                    
                     if (result.status === 'success') {
                         setSyncMessage({ text: `Berhasil mencairkan ${result.updated} paket untuk ${selectedOlshopToCairkan.name}!`, type: 'success' });
                         setIsCairkanModalOpen(false);
                         syncData(); 
-                    } else { setSyncMessage({ text: 'Gagal memproses: ' + result.message, type: 'error' }); }
+                    } else setSyncMessage({ text: 'Gagal memproses: ' + result.message, type: 'error' });
                 } catch (error) { setSyncMessage({ text: 'Terjadi kesalahan jaringan.', type: 'error' }); } 
                 finally { setIsProcessingCair(false); }
             };
 
+            // ==========================================
+            // LOGIKA FORM EDIT PAKET
+            // ==========================================
+            const openEditModal = (pkg) => {
+                let tgl = pkg.dateString || pkg.tanggalInput || '';
+                if (tgl && tgl.includes('T')) tgl = tgl.split('T')[0];
+                else if (tgl) {
+                    try { const d = new Date(tgl); if (!isNaN(d.getTime())) tgl = d.toISOString().split('T')[0]; } 
+                    catch(e) {}
+                }
+
+                setEditModal({
+                    isOpen: true,
+                    packageId: pkg.packageId,
+                    olshopName: pkg.olshopName || '',
+                    status: String(pkg.status).toUpperCase(),
+                    metodeBayar: pkg.metodeBayar || '',
+                    hargaPaket: pkg.hargaPaket || 0,
+                    ongkirKode: pkg.ongkirKode || '',
+                    ongkirDasar: pkg.ongkirDasar || 0,
+                    tambahanOngkir: pkg.tambahanOngkir || 0,
+                    kurirId: pkg.kurirEmailAsli || pkg.kurirId || '',
+                    tanggal: tgl
+                });
+                setIsEditModalOpen(true);
+            };
+
+            const handleOngkirKodeChange = (val) => {
+                const zona = masterZonas.find(z => z.id === val || z.nama === val);
+                const harga = zona ? zona.harga : 0;
+                setEditModal(prev => ({ ...prev, ongkirKode: val, ongkirDasar: harga }));
+            };
+
+            const handleEditSubmit = async (e) => {
+                e.preventDefault();
+                setIsProcessingEdit(true);
+                setSyncMessage({ text: `Menyimpan perubahan resi ${editModal.packageId}...`, type: 'info' });
+
+                try {
+                    const formData = new URLSearchParams();
+                    formData.append('action', 'editPackageMaster'); 
+                    formData.append('packageId', editModal.packageId);
+                    formData.append('olshopName', editModal.olshopName);
+                    formData.append('status', editModal.status);
+                    formData.append('metodeBayar', editModal.metodeBayar);
+                    formData.append('hargaPaket', editModal.hargaPaket);
+                    formData.append('ongkirKode', editModal.ongkirKode); // Kirim string TRF
+                    formData.append('tambahanOngkir', editModal.tambahanOngkir);
+                    formData.append('kurirId', editModal.kurirId); // Kirim ID email
+                    formData.append('tanggal', editModal.tanggal);
+
+                    const response = await fetch(SCRIPT_URL, { method: 'POST', body: formData, headers: { 'Content-Type': 'application/x-www-form-urlencoded' } });
+                    const result = await response.json();
+
+                    if (result.status === 'success') {
+                        setSyncMessage({ text: 'Perubahan berhasil disimpan!', type: 'success' });
+                        setIsEditModalOpen(false);
+                        syncData(); 
+                    } else setSyncMessage({ text: 'Gagal mengedit: ' + result.message, type: 'error' });
+                } catch (error) { setSyncMessage({ text: 'Terjadi kesalahan jaringan.', type: 'error' }); } 
+                finally { setIsProcessingEdit(false); }
+            };
+
             const { filteredPkgs, olshopReport, kurirReport, globalSummary } = useMemo(() => {
                 let pkgs = packages;
-
                 if (searchQuery) {
                     const q = searchQuery.toLowerCase().trim();
                     pkgs = pkgs.filter(p => String(p.customerName || '').toLowerCase().includes(q) || String(p.packageId || '').toLowerCase().includes(q) || String(p.olshopName || '').toLowerCase().includes(q) || String(p.kurirId || '').toLowerCase().includes(q));
                 }
-
                 if (startDate || endDate) {
                    pkgs = pkgs.filter(p => {
                       let pDateStr = p.dateString || p.tanggal || '';
@@ -250,7 +315,6 @@
                       return normalizedDateStr >= sDate && normalizedDateStr <= eDate;
                    });
                 }
-
                 if (globalStatusFilter !== 'semua') {
                     pkgs = pkgs.filter(p => {
                         let stat = String(p.status).toLowerCase().trim().replace(' ', '_');
@@ -260,8 +324,7 @@
                     });
                 }
 
-                const oReport = {};
-                const kReport = {};
+                const oReport = {}; const kReport = {};
                 const summary = { totalPencairanOlshop: 0, totalDanaBelumCair: 0, totalDanaCair: 0, totalSetoranKurir: 0, totalPaketSukses: 0, totalOngkirTambahanKurir: 0, totalProfitPerusahaan: 0 };
 
                 pkgs.forEach(pkg => {
@@ -269,15 +332,9 @@
                     const olshopName = String(pkg.olshopName || 'Tanpa Nama').toUpperCase();
                     const kurirName = String(pkg.kurirId || 'Tanpa Kurir').split('@')[0].toUpperCase();
                     const metode = String(pkg.metodeBayar).trim().toUpperCase();
-                    
                     const { hBarang, oDasar, oTambahan, oTotal } = getFinancials(pkg);
 
-                    if (!oReport[olshopName]) oReport[olshopName] = { 
-                        totalSukses: 0, totalProses: 0, totalPending: 0, totalCancel: 0, 
-                        pencairan: 0, potongan: 0, potonganDasar: 0, potonganTambahan: 0, 
-                        totalDasar: 0, totalTambahan: 0, nilaiBarang: 0, nominalBelumCair: 0, 
-                        paketBelumCairIds: [], paketBelumCairDetails: [], paketTerkait: [] 
-                    };
+                    if (!oReport[olshopName]) oReport[olshopName] = { totalSukses: 0, totalProses: 0, totalPending: 0, totalCancel: 0, pencairan: 0, potongan: 0, potonganDasar: 0, potonganTambahan: 0, totalDasar: 0, totalTambahan: 0, nilaiBarang: 0, nominalBelumCair: 0, paketBelumCairIds: [], paketBelumCairDetails: [], paketTerkait: [] };
                     if (!kReport[kurirName]) kReport[kurirName] = { totalSukses: 0, totalProses: 0, totalPending: 0, totalCancel: 0, setoran: 0, rincianCash: 0, rincianMinusTf: 0, totalTfOlshop: 0, totalTfKantor: 0, totalTambahanOngkir: 0, tambahanOngkirCash: 0, tambahanOngkirTF: 0, paketTerkait: [], totalDasarOngkir: 0, profitPerusahaan: 0, targetGajiBase: 0 };
                     
                     oReport[olshopName].paketTerkait.push(pkg);
@@ -286,18 +343,16 @@
                     if (statusPkg === 'sukses') {
                         oReport[olshopName].totalSukses += 1;
                         kReport[kurirName].totalSukses += 1;
-                        
                         summary.totalPaketSukses += 1;
-                        summary.totalOngkirTambahanKurir += oTambahan; // Hak Kurir
-                        summary.totalProfitPerusahaan += oDasar; // Profit = Ongkir Dasar
+                        summary.totalOngkirTambahanKurir += oTambahan; 
+                        summary.totalProfitPerusahaan += oDasar; 
                         
                         oReport[olshopName].totalDasar += oDasar;
                         oReport[olshopName].totalTambahan += oTambahan;
                         
                         kReport[kurirName].totalTambahanOngkir += oTambahan;
                         kReport[kurirName].totalDasarOngkir += oDasar;
-                        kReport[kurirName].profitPerusahaan += oDasar; // Profit dasar untuk kurir ini
-                        
+                        kReport[kurirName].profitPerusahaan += oDasar; 
                         kReport[kurirName].targetGajiBase = getTargetGaji(kurirName);
 
                         const isCair = String(pkg.statusPencairan).toLowerCase() === 'cair';
@@ -311,11 +366,10 @@
                         if (metode === 'CASH' || metode === 'TF KANTOR' || metode === 'COD') oReport[olshopName].nilaiBarang += hBarang;
                         summary.totalPencairanOlshop += pencairan;
 
-                        // JIKA PAKET BELUM CAIR, SIMPAN DETAILNYA JUGA
                         if (!isCair) {
                             oReport[olshopName].nominalBelumCair += pencairan;
                             oReport[olshopName].paketBelumCairIds.push(pkg.packageId); 
-                            oReport[olshopName].paketBelumCairDetails.push(pkg); // Simpan seluruh objek paket
+                            oReport[olshopName].paketBelumCairDetails.push(pkg);
                             summary.totalDanaBelumCair += pencairan;
                         } else { summary.totalDanaCair += pencairan; }
 
@@ -332,7 +386,6 @@
                             kReport[kurirName].tambahanOngkirCash += oTambahan; 
                             setoranKurir = hBarang + oDasar; 
                         }
-
                         kReport[kurirName].setoran += setoranKurir;
                         summary.totalSetoranKurir += setoranKurir;
 
@@ -853,7 +906,7 @@
                                                                                     <th className="py-2 px-3 font-bold text-right">Tagihan & Mtd</th>
                                                                                     <th className="py-2 px-3 font-bold text-right">Brg (Hrg)</th>
                                                                                     <th className="py-2 px-3 font-bold text-right">Ongkir (Dsr+Tmb)</th>
-                                                                                    <th className="py-2 px-3 font-bold text-center">Bukti</th>
+                                                                                    <th className="py-2 px-3 font-bold text-center">Aksi / Bukti</th>
                                                                                 </tr>
                                                                             </thead>
                                                                             <tbody className="divide-y divide-slate-700/30 bg-[#1e293b]/50">
@@ -896,13 +949,18 @@
                                                                                                 <div className={`text-[8px] font-bold mt-0.5 ${isSukses ? 'text-orange-400' : 'text-slate-500'}`} title="Tambahan / Volume">+ {formatCurrency(oTambahan)}</div>
                                                                                             </td>
                                                                                             <td className="py-2 px-3 text-center whitespace-nowrap align-middle">
-                                                                                                {pkg.fotoBukti ? (
-                                                                                                    <div className="w-7 h-7 mx-auto rounded bg-slate-800 border border-slate-600 overflow-hidden cursor-pointer hover:opacity-80 transition-opacity" onClick={(e) => { e.stopPropagation(); setSelectedImage(`https://www.appsheet.com/template/gettablefileurl?appName=${APPSHEET_APP_ID}&tableName=InputPaket&fileName=${encodeURIComponent(pkg.fotoBukti)}`); }}>
-                                                                                                        <img src={`https://www.appsheet.com/template/gettablefileurl?appName=${APPSHEET_APP_ID}&tableName=InputPaket&fileName=${encodeURIComponent(pkg.fotoBukti)}`} className="w-full h-full object-cover" />
-                                                                                                    </div>
-                                                                                                ) : (
-                                                                                                    <div className="w-7 h-7 mx-auto rounded bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-500 text-[10px]"><i className="fas fa-image"></i></div>
-                                                                                                )}
+                                                                                                <div className="flex items-center justify-center gap-1.5">
+                                                                                                    {pkg.fotoBukti ? (
+                                                                                                        <button onClick={(e) => { e.stopPropagation(); setSelectedImage(getFotoUrl(pkg)); }} className="w-7 h-7 rounded bg-slate-800 border border-slate-600 hover:opacity-80 flex items-center justify-center text-emerald-400 transition-opacity" title="Lihat Foto Bukti">
+                                                                                                            <i className="fas fa-image text-[10px]"></i>
+                                                                                                        </button>
+                                                                                                    ) : (
+                                                                                                        <div className="w-7 h-7 rounded bg-slate-800/50 border border-slate-700/50 flex items-center justify-center text-slate-600" title="Tidak Ada Foto"><i className="fas fa-image text-[10px]"></i></div>
+                                                                                                    )}
+                                                                                                    <button onClick={(e) => { e.stopPropagation(); openEditModal(pkg); }} className="w-7 h-7 rounded bg-blue-600/20 border border-blue-500/30 hover:bg-blue-600 hover:text-white text-blue-400 flex items-center justify-center transition-colors shadow-sm" title="Edit Paket">
+                                                                                                        <i className="fas fa-edit text-[10px]"></i>
+                                                                                                    </button>
+                                                                                                </div>
                                                                                             </td>
                                                                                         </tr>
                                                                                     );
@@ -922,7 +980,6 @@
                             </div>
                         )}
 
-                        {/* KEMBALI DIMASUKKAN: LAPORAN KURIR UTUH */}
                         {activeTab === 'kurir' && (
                             <div className="bg-[#1e293b] rounded-xl shadow-sm border border-slate-700 overflow-hidden animate-fade-in-down">
                                 <div className="p-3 md:p-4 border-b border-slate-700 bg-slate-800/50 flex justify-between items-center">
@@ -999,7 +1056,7 @@
                                                                                     <th className="py-2 px-3 font-bold text-right">Tagihan & Mtd</th>
                                                                                     <th className="py-2 px-3 font-bold text-right">Brg (Hrg)</th>
                                                                                     <th className="py-2 px-3 font-bold text-right">Ongkir (Dsr+Tmb)</th>
-                                                                                    <th className="py-2 px-3 font-bold text-center">Bukti</th>
+                                                                                    <th className="py-2 px-3 font-bold text-center">Aksi / Bukti</th>
                                                                                 </tr>
                                                                             </thead>
                                                                             <tbody className="divide-y divide-slate-700/30 bg-[#1e293b]/50">
@@ -1035,13 +1092,18 @@
                                                                                                 <div className={`text-[8px] font-bold mt-0.5 ${isSukses ? 'text-orange-400' : 'text-slate-500'}`} title="Tambahan / Volume">+ {formatCurrency(oTambahan)}</div>
                                                                                             </td>
                                                                                             <td className="py-2 px-3 text-center whitespace-nowrap align-middle">
-                                                                                                {pkg.fotoBukti ? (
-                                                                                                    <div className="w-7 h-7 mx-auto rounded bg-slate-800 border border-slate-600 overflow-hidden cursor-pointer hover:opacity-80 transition-opacity" onClick={(e) => { e.stopPropagation(); setSelectedImage(`https://www.appsheet.com/template/gettablefileurl?appName=${APPSHEET_APP_ID}&tableName=InputPaket&fileName=${encodeURIComponent(pkg.fotoBukti)}`); }}>
-                                                                                                        <img src={`https://www.appsheet.com/template/gettablefileurl?appName=${APPSHEET_APP_ID}&tableName=InputPaket&fileName=${encodeURIComponent(pkg.fotoBukti)}`} className="w-full h-full object-cover" />
-                                                                                                    </div>
-                                                                                                ) : (
-                                                                                                    <div className="w-7 h-7 mx-auto rounded bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-500 text-[10px]"><i className="fas fa-image"></i></div>
-                                                                                                )}
+                                                                                                <div className="flex items-center justify-center gap-1.5">
+                                                                                                    {pkg.fotoBukti ? (
+                                                                                                        <button onClick={(e) => { e.stopPropagation(); setSelectedImage(getFotoUrl(pkg)); }} className="w-7 h-7 rounded bg-slate-800 border border-slate-600 hover:opacity-80 flex items-center justify-center text-emerald-400 transition-opacity" title="Lihat Foto Bukti">
+                                                                                                            <i className="fas fa-image text-[10px]"></i>
+                                                                                                        </button>
+                                                                                                    ) : (
+                                                                                                        <div className="w-7 h-7 rounded bg-slate-800/50 border border-slate-700/50 flex items-center justify-center text-slate-600" title="Tidak Ada Foto"><i className="fas fa-image text-[10px]"></i></div>
+                                                                                                    )}
+                                                                                                    <button onClick={(e) => { e.stopPropagation(); openEditModal(pkg); }} className="w-7 h-7 rounded bg-blue-600/20 border border-blue-500/30 hover:bg-blue-600 hover:text-white text-blue-400 flex items-center justify-center transition-colors shadow-sm" title="Edit Paket">
+                                                                                                        <i className="fas fa-edit text-[10px]"></i>
+                                                                                                    </button>
+                                                                                                </div>
                                                                                             </td>
                                                                                         </tr>
                                                                                     );
@@ -1062,7 +1124,7 @@
                         )}
                     </div>
 
-                    {/* MODAL CAIRKAN (Dilengkapi Rincian Customer) */}
+                    {/* MODAL KONFIRMASI CAIRKAN */}
                     {isCairkanModalOpen && selectedOlshopToCairkan && (
                         <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in-down">
                             <div className="bg-[#1e293b] rounded-2xl border border-slate-700 shadow-2xl w-full max-w-md overflow-hidden">
@@ -1072,7 +1134,7 @@
                                 </div>
                                 <div className="p-5">
                                     <p className="text-slate-300 text-sm mb-4">Anda akan memproses pencairan dana untuk Olshop berikut:</p>
-                                    <div className="bg-slate-900 rounded-xl p-4 border border-slate-700 mb-4">
+                                    <div className="bg-slate-900 rounded-xl p-4 border border-slate-700 mb-5">
                                         <div className="flex justify-between items-center mb-2">
                                             <span className="text-slate-400 text-xs font-bold uppercase tracking-wider">Nama Olshop</span>
                                             <span className="text-white font-bold">{selectedOlshopToCairkan.name}</span>
@@ -1086,39 +1148,6 @@
                                             <span className="text-emerald-400 font-black text-lg">{formatCurrency(selectedOlshopToCairkan.nominalBelumCair)}</span>
                                         </div>
                                     </div>
-
-                                    {/* DAFTAR RINCIAN PAKET BELUM CAIR (FITUR BARU) */}
-                                    <div className="mb-5">
-                                        <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-2"><i className="fas fa-list-ul mr-1.5"></i> Rincian Paket Belum Cair</h4>
-                                        <div className="max-h-40 overflow-y-auto pr-1 space-y-2 scrollbar-hide">
-                                            {selectedOlshopToCairkan.paketBelumCairDetails.map((pDetail, idx) => {
-                                                let displayTgl = String(pDetail.dateString || pDetail.tanggal || '-');
-                                                if (displayTgl !== '-' && displayTgl.includes('T')) displayTgl = displayTgl.split('T')[0];
-                                                
-                                                const { hBarang, oTotal } = getFinancials(pDetail);
-                                                const mtd = String(pDetail.metodeBayar).trim().toUpperCase();
-                                                let pNominal = 0;
-                                                if (mtd === 'TF OLSHOP') pNominal = -oTotal;
-                                                else if (mtd === 'CASH' || mtd === 'TF KANTOR' || mtd === 'COD') pNominal = hBarang;
-
-                                                return (
-                                                    <div key={idx} className="bg-slate-800 border border-slate-700 rounded-lg p-2.5 flex justify-between items-center">
-                                                        <div className="flex flex-col">
-                                                            <span className="text-xs font-bold text-slate-200">{pDetail.customerName}</span>
-                                                            <div className="flex items-center gap-2 mt-0.5">
-                                                                <span className="text-[9px] font-mono text-emerald-400 bg-emerald-900/20 border border-emerald-800/30 px-1 rounded">{pDetail.packageId}</span>
-                                                                <span className="text-[9px] text-slate-500"><i className="far fa-calendar-alt mr-1"></i>{displayTgl}</span>
-                                                            </div>
-                                                        </div>
-                                                        <span className={`text-xs font-black ${pNominal >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                                                            {formatCurrency(pNominal)}
-                                                        </span>
-                                                    </div>
-                                                )
-                                            })}
-                                        </div>
-                                    </div>
-
                                     <div className="flex gap-3">
                                         <button onClick={() => setIsCairkanModalOpen(false)} disabled={isProcessingCair} className="flex-1 py-2.5 rounded-xl font-bold text-slate-300 bg-slate-700 hover:bg-slate-600 transition-colors">Batal</button>
                                         <button onClick={handleProsesCairkan} disabled={isProcessingCair} className="flex-1 py-2.5 rounded-xl font-bold text-white bg-emerald-600 hover:bg-emerald-500 transition-colors flex justify-center items-center shadow-lg shadow-emerald-900/50">
@@ -1130,10 +1159,144 @@
                         </div>
                     )}
 
+                    {/* MODAL EDIT DATA PAKET (TERBARU) */}
+                    {isEditModalOpen && (
+                        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in-down">
+                            <div className="bg-[#1e293b] rounded-2xl border border-slate-700 shadow-2xl w-full max-w-lg overflow-hidden">
+                                <div className="p-4 md:p-5 border-b border-slate-700 bg-slate-800 flex justify-between items-center">
+                                    <h3 className="font-bold text-white flex items-center"><i className="fas fa-edit text-blue-500 mr-2"></i> Edit Data Paket</h3>
+                                    <button onClick={() => setIsEditModalOpen(false)} className="text-slate-400 hover:text-white transition-colors"><i className="fas fa-times"></i></button>
+                                </div>
+                                
+                                <form onSubmit={handleEditSubmit} className="p-4 md:p-5 space-y-4 max-h-[75vh] overflow-y-auto scrollbar-hide">
+                                    <div className="bg-slate-900 p-3 rounded-lg border border-slate-700 text-center mb-2">
+                                        <span className="text-xs text-slate-400 font-bold uppercase tracking-widest">Resi Pengiriman</span>
+                                        <h2 className="text-lg font-black text-blue-400 font-mono tracking-widest">{editModal.packageId}</h2>
+                                    </div>
+                                    
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        {/* NAMA OLSHOP */}
+                                        <div className="flex flex-col">
+                                            <label className="text-[10px] text-slate-400 font-bold uppercase mb-1">Nama Toko (Olshop)</label>
+                                            <input 
+                                                list="list-olshops"
+                                                value={editModal.olshopName}
+                                                onChange={(e) => setEditModal({...editModal, olshopName: e.target.value})}
+                                                className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white font-bold outline-none focus:border-blue-500"
+                                            />
+                                            <datalist id="list-olshops">
+                                                {masterOlshops.map((o, i) => <option key={i} value={o.nama} />)}
+                                            </datalist>
+                                        </div>
+
+                                        {/* KURIR PENGANTAR */}
+                                        <div className="flex flex-col">
+                                            <label className="text-[10px] text-slate-400 font-bold uppercase mb-1">Email / ID Kurir</label>
+                                            <input 
+                                                list="list-kurirs"
+                                                value={editModal.kurirId}
+                                                onChange={(e) => setEditModal({...editModal, kurirId: e.target.value})}
+                                                className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white font-bold outline-none focus:border-blue-500"
+                                            />
+                                            <datalist id="list-kurirs">
+                                                {masterKurirs.map((k, i) => <option key={i} value={k.id}>{k.nama}</option>)}
+                                            </datalist>
+                                        </div>
+
+                                        <div className="flex flex-col">
+                                            <label className="text-[10px] text-slate-400 font-bold uppercase mb-1">Status Pengiriman</label>
+                                            <select 
+                                                value={editModal.status}
+                                                onChange={(e) => setEditModal({...editModal, status: e.target.value})}
+                                                className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white font-bold outline-none focus:border-blue-500"
+                                            >
+                                                <option value="SUKSES">Sukses</option>
+                                                <option value="SIAP_ANTAR">Proses (Siap Antar)</option>
+                                                <option value="PENDING">Pending</option>
+                                                <option value="CANCEL">Cancel / Batal</option>
+                                            </select>
+                                        </div>
+
+                                        <div className="flex flex-col">
+                                            <label className="text-[10px] text-slate-400 font-bold uppercase mb-1">Metode Bayar</label>
+                                            <select 
+                                                value={editModal.metodeBayar}
+                                                onChange={(e) => setEditModal({...editModal, metodeBayar: e.target.value})}
+                                                className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white font-bold outline-none focus:border-blue-500"
+                                            >
+                                                <option value="CASH">CASH</option>
+                                                <option value="TF OLSHOP">TF OLSHOP</option>
+                                                <option value="TF KANTOR">TF KANTOR</option>
+                                                <option value="COD">COD</option>
+                                            </select>
+                                        </div>
+
+                                        <div className="flex flex-col">
+                                            <label className="text-[10px] text-slate-400 font-bold uppercase mb-1">Harga Barang</label>
+                                            <input 
+                                                type="number"
+                                                value={editModal.hargaPaket}
+                                                onChange={(e) => setEditModal({...editModal, hargaPaket: e.target.value})}
+                                                className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white font-bold outline-none focus:border-blue-500"
+                                            />
+                                        </div>
+
+                                        {/* KODE ONGKIR TRF */}
+                                        <div className="flex flex-col">
+                                            <label className="text-[10px] text-slate-400 font-bold uppercase mb-1">Kode Ongkir (TRF/ZONA)</label>
+                                            <input 
+                                                list="list-zonas"
+                                                value={editModal.ongkirKode}
+                                                onChange={(e) => handleOngkirKodeChange(e.target.value)}
+                                                className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white font-bold outline-none focus:border-blue-500"
+                                            />
+                                            <datalist id="list-zonas">
+                                                {masterZonas.map((z, i) => <option key={i} value={z.id}>{z.nama} (Rp {formatCurrency(z.harga)})</option>)}
+                                            </datalist>
+                                            {editModal.ongkirDasar > 0 && <span className="text-[9px] text-emerald-400 mt-1 font-bold">Terbaca: Rp {formatCurrency(editModal.ongkirDasar)}</span>}
+                                        </div>
+
+                                        <div className="flex flex-col">
+                                            <label className="text-[10px] text-slate-400 font-bold uppercase mb-1">Tambahan Ongkir (Vol)</label>
+                                            <input 
+                                                type="number"
+                                                value={editModal.tambahanOngkir}
+                                                onChange={(e) => setEditModal({...editModal, tambahanOngkir: e.target.value})}
+                                                className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white font-bold outline-none focus:border-blue-500"
+                                            />
+                                        </div>
+
+                                        <div className="flex flex-col">
+                                            <label className="text-[10px] text-slate-400 font-bold uppercase mb-1">Ubah Tanggal</label>
+                                            <input 
+                                                type="date"
+                                                value={editModal.tanggal}
+                                                onChange={(e) => setEditModal({...editModal, tanggal: e.target.value})}
+                                                className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white font-bold outline-none focus:border-blue-500"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div className="bg-blue-900/20 border border-blue-500/30 p-3 rounded-xl mt-2 text-center">
+                                        <span className="text-[10px] text-blue-400 font-bold uppercase tracking-widest mb-1 block">Estimasi Tagihan Resi</span>
+                                        <h3 className="text-2xl font-black text-white">{formatCurrency(Number(editModal.hargaPaket) + Number(editModal.ongkirDasar) + Number(editModal.tambahanOngkir))}</h3>
+                                    </div>
+
+                                    <div className="flex gap-3 pt-4 border-t border-slate-700">
+                                        <button type="button" onClick={() => setIsEditModalOpen(false)} disabled={isProcessingEdit} className="flex-1 py-3 rounded-xl font-bold text-slate-300 bg-slate-700 hover:bg-slate-600 transition-colors">Batal</button>
+                                        <button type="submit" disabled={isProcessingEdit} className="flex-1 py-3 rounded-xl font-bold text-white bg-blue-600 hover:bg-blue-500 transition-colors flex justify-center items-center shadow-lg shadow-blue-900/50">
+                                            {isProcessingEdit ? <><i className="fas fa-spinner fa-spin mr-2"></i> Menyimpan...</> : <><i className="fas fa-save mr-2"></i> Simpan Edit</>}
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    )}
+
                     {/* MODAL FOTO MEMBESAR */}
                     {selectedImage && (
                         <div 
-                            className="fixed inset-0 z-[999] flex items-center justify-center bg-black/90 backdrop-blur-sm p-4 transition-opacity"
+                            className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/90 backdrop-blur-sm p-4 transition-opacity"
                             onClick={() => setSelectedImage(null)}
                         >
                             <div className="relative w-full max-w-lg md:max-w-2xl flex flex-col items-center transform transition-all scale-100" onClick={(e) => e.stopPropagation()}>
