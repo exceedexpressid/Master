@@ -41,8 +41,17 @@
         input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
         input[type=number] { -moz-appearance: textfield; }
         
-        /* Ubah warna panah bawaan Datalist */
-        input::-webkit-calendar-picker-indicator { opacity: 1; filter: invert(0.8); cursor: pointer; }
+        /* Ubah warna panah dropdown/select */
+        select {
+            background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%239ca3af' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+            background-position: right 0.5rem center;
+            background-repeat: no-repeat;
+            background-size: 1.5em 1.5em;
+            padding-right: 2.5rem;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            appearance: none;
+        }
     </style>
 </head>
 <body class="antialiased text-slate-200">
@@ -948,17 +957,24 @@
                                                                                                 <div className={`font-bold ${isSukses ? 'text-red-400' : 'text-slate-400'}`} title="Ongkir Dasar">{formatCurrency(oDasar)}</div>
                                                                                                 <div className={`text-[8px] font-bold mt-0.5 ${isSukses ? 'text-orange-400' : 'text-slate-500'}`} title="Tambahan / Volume">+ {formatCurrency(oTambahan)}</div>
                                                                                             </td>
-                                                                                            <td className="py-2 px-3 text-center whitespace-nowrap align-middle">
-                                                                                                <div className="flex items-center justify-center gap-1.5">
+                                                                                            <td className="py-2 px-3 text-center align-middle">
+                                                                                                <div className="flex flex-col items-center justify-center gap-1.5">
                                                                                                     {pkg.fotoBukti ? (
-                                                                                                        <button onClick={(e) => { e.stopPropagation(); setSelectedImage(getFotoUrl(pkg)); }} className="w-7 h-7 rounded bg-slate-800 border border-slate-600 hover:opacity-80 flex items-center justify-center text-emerald-400 transition-opacity" title="Lihat Foto Bukti">
-                                                                                                            <i className="fas fa-image text-[10px]"></i>
-                                                                                                        </button>
+                                                                                                        <div 
+                                                                                                            className="w-14 h-14 md:w-16 md:h-16 mx-auto rounded-md bg-slate-800 border border-slate-600 overflow-hidden cursor-pointer hover:opacity-80 transition-opacity shadow-sm" 
+                                                                                                            onClick={(e) => { e.stopPropagation(); setSelectedImage(getFotoUrl(pkg)); }}
+                                                                                                            title="Klik untuk perbesar"
+                                                                                                        >
+                                                                                                            <img src={getFotoUrl(pkg)} className="w-full h-full object-cover" alt="Bukti" />
+                                                                                                        </div>
                                                                                                     ) : (
-                                                                                                        <div className="w-7 h-7 rounded bg-slate-800/50 border border-slate-700/50 flex items-center justify-center text-slate-600" title="Tidak Ada Foto"><i className="fas fa-image text-[10px]"></i></div>
+                                                                                                        <div className="w-14 h-14 md:w-16 md:h-16 mx-auto rounded-md bg-slate-800/50 border border-slate-700 border-dashed flex flex-col items-center justify-center text-slate-500" title="Tidak Ada Foto">
+                                                                                                            <i className="fas fa-image text-xs mb-1"></i>
+                                                                                                            <span className="text-[8px] font-bold">NO FOTO</span>
+                                                                                                        </div>
                                                                                                     )}
-                                                                                                    <button onClick={(e) => { e.stopPropagation(); openEditModal(pkg); }} className="w-7 h-7 rounded bg-blue-600/20 border border-blue-500/30 hover:bg-blue-600 hover:text-white text-blue-400 flex items-center justify-center transition-colors shadow-sm" title="Edit Paket">
-                                                                                                        <i className="fas fa-edit text-[10px]"></i>
+                                                                                                    <button onClick={(e) => { e.stopPropagation(); openEditModal(pkg); }} className="w-full max-w-[80px] py-1 rounded bg-blue-600/20 border border-blue-500/30 hover:bg-blue-600 hover:text-white text-blue-400 flex items-center justify-center transition-colors shadow-sm mt-1" title="Edit Paket">
+                                                                                                        <i className="fas fa-edit text-[10px] mr-1.5"></i> <span className="text-[10px] font-bold">Edit</span>
                                                                                                     </button>
                                                                                                 </div>
                                                                                             </td>
@@ -1091,17 +1107,24 @@
                                                                                                 <div className={`font-bold ${isSukses ? 'text-red-400' : 'text-slate-400'}`} title="Ongkir Dasar">{formatCurrency(oDasar)}</div>
                                                                                                 <div className={`text-[8px] font-bold mt-0.5 ${isSukses ? 'text-orange-400' : 'text-slate-500'}`} title="Tambahan / Volume">+ {formatCurrency(oTambahan)}</div>
                                                                                             </td>
-                                                                                            <td className="py-2 px-3 text-center whitespace-nowrap align-middle">
-                                                                                                <div className="flex items-center justify-center gap-1.5">
+                                                                                            <td className="py-2 px-3 text-center align-middle">
+                                                                                                <div className="flex flex-col items-center justify-center gap-1.5">
                                                                                                     {pkg.fotoBukti ? (
-                                                                                                        <button onClick={(e) => { e.stopPropagation(); setSelectedImage(getFotoUrl(pkg)); }} className="w-7 h-7 rounded bg-slate-800 border border-slate-600 hover:opacity-80 flex items-center justify-center text-emerald-400 transition-opacity" title="Lihat Foto Bukti">
-                                                                                                            <i className="fas fa-image text-[10px]"></i>
-                                                                                                        </button>
+                                                                                                        <div 
+                                                                                                            className="w-14 h-14 md:w-16 md:h-16 mx-auto rounded-md bg-slate-800 border border-slate-600 overflow-hidden cursor-pointer hover:opacity-80 transition-opacity shadow-sm" 
+                                                                                                            onClick={(e) => { e.stopPropagation(); setSelectedImage(getFotoUrl(pkg)); }}
+                                                                                                            title="Klik untuk perbesar"
+                                                                                                        >
+                                                                                                            <img src={getFotoUrl(pkg)} className="w-full h-full object-cover" alt="Bukti" />
+                                                                                                        </div>
                                                                                                     ) : (
-                                                                                                        <div className="w-7 h-7 rounded bg-slate-800/50 border border-slate-700/50 flex items-center justify-center text-slate-600" title="Tidak Ada Foto"><i className="fas fa-image text-[10px]"></i></div>
+                                                                                                        <div className="w-14 h-14 md:w-16 md:h-16 mx-auto rounded-md bg-slate-800/50 border border-slate-700 border-dashed flex flex-col items-center justify-center text-slate-500" title="Tidak Ada Foto">
+                                                                                                            <i className="fas fa-image text-xs mb-1"></i>
+                                                                                                            <span className="text-[8px] font-bold">NO FOTO</span>
+                                                                                                        </div>
                                                                                                     )}
-                                                                                                    <button onClick={(e) => { e.stopPropagation(); openEditModal(pkg); }} className="w-7 h-7 rounded bg-blue-600/20 border border-blue-500/30 hover:bg-blue-600 hover:text-white text-blue-400 flex items-center justify-center transition-colors shadow-sm" title="Edit Paket">
-                                                                                                        <i className="fas fa-edit text-[10px]"></i>
+                                                                                                    <button onClick={(e) => { e.stopPropagation(); openEditModal(pkg); }} className="w-full max-w-[80px] py-1 rounded bg-blue-600/20 border border-blue-500/30 hover:bg-blue-600 hover:text-white text-blue-400 flex items-center justify-center transition-colors shadow-sm mt-1" title="Edit Paket">
+                                                                                                        <i className="fas fa-edit text-[10px] mr-1.5"></i> <span className="text-[10px] font-bold">Edit</span>
                                                                                                     </button>
                                                                                                 </div>
                                                                                             </td>
@@ -1159,7 +1182,7 @@
                         </div>
                     )}
 
-                    {/* MODAL EDIT DATA PAKET (TERBARU) */}
+                    {/* MODAL EDIT DATA PAKET (TERBARU DENGAN DROP-DOWN MURNI) */}
                     {isEditModalOpen && (
                         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in-down">
                             <div className="bg-[#1e293b] rounded-2xl border border-slate-700 shadow-2xl w-full max-w-lg overflow-hidden">
@@ -1178,31 +1201,36 @@
                                         {/* NAMA OLSHOP */}
                                         <div className="flex flex-col">
                                             <label className="text-[10px] text-slate-400 font-bold uppercase mb-1">Nama Toko (Olshop)</label>
-                                            <input 
-                                                list="list-olshops"
+                                            <select 
                                                 value={editModal.olshopName}
                                                 onChange={(e) => setEditModal({...editModal, olshopName: e.target.value})}
                                                 className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white font-bold outline-none focus:border-blue-500"
-                                            />
-                                            <datalist id="list-olshops">
-                                                {masterOlshops.map((o, i) => <option key={i} value={o.nama} />)}
-                                            </datalist>
+                                            >
+                                                <option value="">-- Pilih Olshop --</option>
+                                                {!masterOlshops.some(o => o.nama === editModal.olshopName) && editModal.olshopName && (
+                                                    <option value={editModal.olshopName}>{editModal.olshopName}</option>
+                                                )}
+                                                {masterOlshops.map((o, i) => <option key={i} value={o.nama}>{o.nama}</option>)}
+                                            </select>
                                         </div>
 
                                         {/* KURIR PENGANTAR */}
                                         <div className="flex flex-col">
                                             <label className="text-[10px] text-slate-400 font-bold uppercase mb-1">Email / ID Kurir</label>
-                                            <input 
-                                                list="list-kurirs"
+                                            <select 
                                                 value={editModal.kurirId}
                                                 onChange={(e) => setEditModal({...editModal, kurirId: e.target.value})}
                                                 className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white font-bold outline-none focus:border-blue-500"
-                                            />
-                                            <datalist id="list-kurirs">
+                                            >
+                                                <option value="">-- Pilih Kurir --</option>
+                                                {!masterKurirs.some(k => k.id === editModal.kurirId) && editModal.kurirId && (
+                                                    <option value={editModal.kurirId}>{editModal.kurirId}</option>
+                                                )}
                                                 {masterKurirs.map((k, i) => <option key={i} value={k.id}>{k.nama}</option>)}
-                                            </datalist>
+                                            </select>
                                         </div>
 
+                                        {/* STATUS PENGIRIMAN */}
                                         <div className="flex flex-col">
                                             <label className="text-[10px] text-slate-400 font-bold uppercase mb-1">Status Pengiriman</label>
                                             <select 
@@ -1217,6 +1245,7 @@
                                             </select>
                                         </div>
 
+                                        {/* METODE BAYAR */}
                                         <div className="flex flex-col">
                                             <label className="text-[10px] text-slate-400 font-bold uppercase mb-1">Metode Bayar</label>
                                             <select 
@@ -1224,6 +1253,7 @@
                                                 onChange={(e) => setEditModal({...editModal, metodeBayar: e.target.value})}
                                                 className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white font-bold outline-none focus:border-blue-500"
                                             >
+                                                <option value="">-- KOSONG / BELUM ADA --</option>
                                                 <option value="CASH">CASH</option>
                                                 <option value="TF OLSHOP">TF OLSHOP</option>
                                                 <option value="TF KANTOR">TF KANTOR</option>
@@ -1231,6 +1261,7 @@
                                             </select>
                                         </div>
 
+                                        {/* HARGA BARANG */}
                                         <div className="flex flex-col">
                                             <label className="text-[10px] text-slate-400 font-bold uppercase mb-1">Harga Barang</label>
                                             <input 
@@ -1244,18 +1275,21 @@
                                         {/* KODE ONGKIR TRF */}
                                         <div className="flex flex-col">
                                             <label className="text-[10px] text-slate-400 font-bold uppercase mb-1">Kode Ongkir (TRF/ZONA)</label>
-                                            <input 
-                                                list="list-zonas"
+                                            <select 
                                                 value={editModal.ongkirKode}
                                                 onChange={(e) => handleOngkirKodeChange(e.target.value)}
                                                 className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white font-bold outline-none focus:border-blue-500"
-                                            />
-                                            <datalist id="list-zonas">
-                                                {masterZonas.map((z, i) => <option key={i} value={z.id}>{z.nama} (Rp {formatCurrency(z.harga)})</option>)}
-                                            </datalist>
+                                            >
+                                                <option value="">-- Pilih TRF / ZONA --</option>
+                                                {!masterZonas.some(z => z.id === editModal.ongkirKode) && editModal.ongkirKode && (
+                                                    <option value={editModal.ongkirKode}>{editModal.ongkirKode}</option>
+                                                )}
+                                                {masterZonas.map((z, i) => <option key={i} value={z.id}>{z.id} - {z.nama} (Rp {formatCurrency(z.harga)})</option>)}
+                                            </select>
                                             {editModal.ongkirDasar > 0 && <span className="text-[9px] text-emerald-400 mt-1 font-bold">Terbaca: Rp {formatCurrency(editModal.ongkirDasar)}</span>}
                                         </div>
 
+                                        {/* TAMBAHAN ONGKIR */}
                                         <div className="flex flex-col">
                                             <label className="text-[10px] text-slate-400 font-bold uppercase mb-1">Tambahan Ongkir (Vol)</label>
                                             <input 
@@ -1266,6 +1300,7 @@
                                             />
                                         </div>
 
+                                        {/* TANGGAL */}
                                         <div className="flex flex-col">
                                             <label className="text-[10px] text-slate-400 font-bold uppercase mb-1">Ubah Tanggal</label>
                                             <input 
