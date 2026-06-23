@@ -430,9 +430,10 @@
             const bebanOpsPerKurir = jumlahKurirAktif > 0 ? totalBiayaOperasional / jumlahKurirAktif : 0;
             
             const totalGajiKurirSeluruhnya = kurirReport.reduce((acc, kur) => {
-                const ks = kurirSettings[kur.name] || { gajiHarian: 150000, tglMasuk: '', tglAkhir: '' };
-                const hKerja = (ks.tglMasuk && ks.tglAkhir) ? Math.max(1, Math.ceil((new Date(ks.tglAkhir) - new Date(ks.tglMasuk)) / (1000 * 60 * 60 * 24)) + 1) : 0;
-                return acc + (hKerja * (Number(ks.gajiHarian) || 0));
+                const ks = kurirSettings[kur.name] || { gajiHarian: 150000, tglMasuk: '', tglAkhir: '', hariLibur: 0 };
+                const hKerjaKotor = (ks.tglMasuk && ks.tglAkhir) ? Math.max(0, Math.ceil((new Date(ks.tglAkhir) - new Date(ks.tglMasuk)) / (1000 * 60 * 60 * 24)) + 1) : 0;
+                const hKerjaBersih = Math.max(0, hKerjaKotor - (Number(ks.hariLibur) || 0));
+                return acc + (hKerjaBersih * (Number(ks.gajiHarian) || 0));
             }, 0);
 
             const targetPerusahaanGlobal = totalBiayaOperasional + totalGajiKurirSeluruhnya;
@@ -675,9 +676,10 @@
                                             )}
                                             
                                             {[...kurirReport].map((kur, idx) => {
-                                                const ks = kurirSettings[kur.name] || { gajiHarian: 150000, tglMasuk: '', tglAkhir: '' };
-                                                const hKerja = (ks.tglMasuk && ks.tglAkhir) ? Math.max(1, Math.ceil((new Date(ks.tglAkhir) - new Date(ks.tglMasuk)) / (1000 * 60 * 60 * 24)) + 1) : 0;
-                                                const targetGajiFinal = hKerja * (Number(ks.gajiHarian) || 0);
+                                                const ks = kurirSettings[kur.name] || { gajiHarian: 150000, tglMasuk: '', tglAkhir: '', hariLibur: 0 };
+                                                const hKerjaKotor = (ks.tglMasuk && ks.tglAkhir) ? Math.max(0, Math.ceil((new Date(ks.tglAkhir) - new Date(ks.tglMasuk)) / (1000 * 60 * 60 * 24)) + 1) : 0;
+                                                const hKerjaBersih = Math.max(0, hKerjaKotor - (Number(ks.hariLibur) || 0));
+                                                const targetGajiFinal = hKerjaBersih * (Number(ks.gajiHarian) || 0);
                                                 
                                                 const targetFinal = targetGajiFinal + bebanOpsPerKurir;
                                                 const pencapaian = kur.profitPerusahaan; 
@@ -717,10 +719,17 @@
                                                                     <span className="text-slate-500">Tgl Akhir</span>
                                                                     <input type="date" value={ks.tglAkhir} onChange={(e) => updateKurirSetting(kur.name, 'tglAkhir', e.target.value)} className="bg-slate-900 border border-slate-600 rounded px-1 py-0.5 text-slate-200 outline-none w-[90px]" />
                                                                 </div>
+                                                                <div className="flex justify-between items-center mt-0.5">
+                                                                    <span className="text-slate-500">Izin/Libur</span>
+                                                                    <div className="flex items-center">
+                                                                        <input type="number" value={ks.hariLibur || ''} onChange={(e) => updateKurirSetting(kur.name, 'hariLibur', e.target.value)} className="bg-slate-900 border border-slate-600 rounded px-1 py-0.5 text-slate-200 outline-none w-[50px] text-right focus:border-yellow-500" placeholder="0" />
+                                                                        <span className="text-[9px] text-slate-500 ml-1 w-[36px]">Hari</span>
+                                                                    </div>
+                                                                </div>
                                                             </div>
                                                             {/* Akumulasi Hari & Total Gaji */}
                                                             <div className="flex justify-between items-center text-[10px] bg-slate-900/50 p-1 rounded mb-1">
-                                                                <span className="text-slate-400">Kerja: <b className="text-white">{hKerja} Hari</b></span>
+                                                                <span className="text-slate-400">Kerja: <b className="text-white">{hKerjaBersih} Hari</b></span>
                                                                 <span className="text-emerald-400 font-bold">{formatCurrency(targetGajiFinal)}</span>
                                                             </div>
 
@@ -842,6 +851,18 @@
                                                 </div>
                                             );
                                         })}
+
+                                        {/* AKUMULASI LAPORAN PROFIT */}
+                                        {kurirReport.length > 0 && (
+                                            <div className="grid grid-cols-[250px_100px_1fr_1fr_1fr_1fr] gap-3 px-4 py-4 border-t-2 border-emerald-600/50 bg-slate-800/80 rounded-b-xl items-center mt-1">
+                                                <div className="font-black text-slate-200 uppercase text-xs md:text-sm">TOTAL KESELURUHAN</div>
+                                                <div className="text-center font-black text-white">{kurirReport.reduce((acc, k) => acc + k.totalSukses, 0)} <span className="text-[9px] text-slate-400">Pkt</span></div>
+                                                <div className="text-right font-black text-emerald-400">{formatCurrency(kurirReport.reduce((acc, k) => acc + k.totalDasarOngkir, 0))}</div>
+                                                <div className="text-right font-black text-orange-400">{formatCurrency(kurirReport.reduce((acc, k) => acc + k.totalTambahanOngkir, 0))}</div>
+                                                <div className="text-right font-black text-white">{formatCurrency(kurirReport.reduce((acc, k) => acc + k.totalDasarOngkir + k.totalTambahanOngkir, 0))}</div>
+                                                <div className="text-right font-black text-blue-400">-</div>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             </div>
@@ -1023,143 +1044,27 @@
                                                 );
                                             })
                                         )}
-                                    </div>
-                                </div>
-                            </div>
-                        )}
 
-                        {activeTab === 'kurir' && (
-                            <div className="bg-[#1e293b] rounded-xl shadow-sm border border-slate-700 overflow-hidden animate-fade-in-down">
-                                <div className="p-3 md:p-4 border-b border-slate-700 bg-slate-800/50 flex justify-between items-center">
-                                    <h3 className="font-bold text-slate-200 text-xs md:text-sm">Rekapitulasi Uang Setoran Kurir <span className="text-[10px] text-slate-400 font-normal ml-2">(Klik baris untuk rincian bawaan)</span></h3>
-                                </div>
-                                
-                                <div className="overflow-x-auto scrollbar-hide">
-                                    <div className="min-w-[1050px] flex flex-col">
-                                        {kurirReport.length === 0 ? (
-                                            <div className="p-8 text-center text-slate-500">Tidak ada kinerja kurir di periode/status ini.</div>
-                                        ) : (
-                                            kurirReport.map((kur, idx) => {
-                                                const isExpanded = expandedKurirs.includes(kur.name);
-                                                const currentFilter = kurirFilters[kur.name] || 'semua';
-                                                
-                                                const displayedPaket = kur.paketTerkait.filter(pkg => {
-                                                    if (currentFilter === 'semua') return true;
-                                                    let stat = String(pkg.status).toLowerCase().replace(' ', '_');
-                                                    if (currentFilter === 'proses') return stat === 'siap_antar' || stat === 'proses';
-                                                    return stat === currentFilter;
-                                                });
-
-                                                return (
-                                                    <div key={idx} className="flex flex-col border-b border-slate-700/50 hover:bg-slate-800/30 transition-colors">
-                                                        <div 
-                                                            className="flex items-center justify-between p-3 md:p-4 cursor-pointer"
-                                                            onClick={() => toggleKurir(kur.name)}
-                                                        >
-                                                            <div className="flex flex-col gap-1 w-[200px] md:w-[300px] shrink-0">
-                                                                <div className="flex items-center gap-2.5">
-                                                                    <div className={`w-5 h-5 rounded flex items-center justify-center transition-transform ${isExpanded ? 'bg-blue-500 text-white rotate-180' : 'bg-slate-700 text-slate-400'}`}><i className="fas fa-chevron-down text-[10px]"></i></div>
-                                                                    <i className="fas fa-motorcycle text-blue-400/80"></i>
-                                                                    <span className="font-bold text-slate-200 uppercase truncate text-xs md:text-sm">{kur.name}</span>
-                                                                    <span className="text-[9px] bg-slate-700 text-slate-300 px-2 py-0.5 rounded shrink-0 font-bold">{kur.paketTerkait.length} Pkt</span>
-                                                                </div>
-                                                                <div className="flex gap-2 ml-7 mt-0.5">
-                                                                    <span className="text-[9px] text-emerald-400 font-bold" title="Sukses"><i className="fas fa-check-circle mr-1"></i>{kur.totalSukses}</span>
-                                                                    <span className="text-[9px] text-blue-400 font-bold" title="Proses"><i className="fas fa-truck mr-1"></i>{kur.totalProses}</span>
-                                                                    <span className="text-[9px] text-orange-400 font-bold" title="Pending"><i className="fas fa-clock mr-1"></i>{kur.totalPending}</span>
-                                                                    <span className="text-[9px] text-red-400 font-bold" title="Cancel"><i className="fas fa-times-circle mr-1"></i>{kur.totalCancel}</span>
-                                                                </div>
-                                                            </div>
-                                                            <div className="flex-1 flex justify-end items-center gap-4 md:gap-5">
-                                                                <div className="flex flex-col items-end justify-center min-w-[70px]"><span className="text-[8px] font-bold text-emerald-500/70 uppercase tracking-widest mb-0.5">UANG CASH</span><span className="text-xs md:text-sm font-black text-emerald-400">+{formatCurrency(kur.rincianCash)}</span></div>
-                                                                <div className="flex flex-col items-end justify-center min-w-[70px]" title="Hak ongkir tambahan kurir dari paket CASH (Langsung dikantongi)"><span className="text-[8px] font-bold text-orange-400/80 uppercase tracking-widest mb-0.5">SIMPAN (CASH)</span><span className="text-xs md:text-sm font-black text-orange-400">-{formatCurrency(kur.tambahanOngkirCash)}</span></div>
-                                                                <div className="flex flex-col items-end justify-center min-w-[70px]" title="Hak ongkir tambahan kurir dari paket TF (Dibayar kantor dengan memotong setoran)"><span className="text-[8px] font-bold text-purple-400/80 uppercase tracking-widest mb-0.5">POTONG (TF)</span><span className="text-xs md:text-sm font-black text-purple-400">-{formatCurrency(kur.tambahanOngkirTF)}</span></div>
-                                                                <div className="flex flex-col items-end justify-center min-w-[80px] pl-2 border-l border-slate-700"><span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">WAJIB SETOR</span><span className={`text-[13px] md:text-[15px] font-black ${kur.setoran >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>{formatCurrency(kur.setoran)}</span></div>
-                                                            </div>
-                                                        </div>
-                                                        {isExpanded && (
-                                                            <div className="p-3 md:p-4 bg-[#0f172a]/60 animate-fade-in-down border-t border-slate-700/50">
-                                                                <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-3 gap-3">
-                                                                    <h4 className="text-slate-400 font-bold text-[10px] uppercase tracking-widest flex items-center"><i className="fas fa-boxes mr-2"></i>Rincian Bawaan: {kur.name}</h4>
-                                                                    <div className="flex flex-wrap gap-1.5">
-                                                                        {[{id:'semua', label:'Semua'}, {id:'sukses', label:'Sukses'}, {id:'proses', label:'Proses'}, {id:'pending', label:'Pending'}, {id:'cancel', label:'Cancel'}].map(f => (
-                                                                            <button key={f.id} onClick={(e) => { e.stopPropagation(); setKurirFilters(prev => ({...prev, [kur.name]: f.id})); }}
-                                                                                className={`px-2.5 py-1 rounded text-[9px] font-bold uppercase transition-colors border ${currentFilter === f.id ? 'bg-blue-500 text-white border-blue-500' : 'bg-slate-800 text-slate-400 border-slate-600 hover:bg-slate-700'}`}>
-                                                                                {f.label}
-                                                                            </button>
-                                                                        ))}
-                                                                    </div>
-                                                                </div>
-                                                                
-                                                                {displayedPaket.length === 0 ? (
-                                                                    <div className="text-center py-4 text-slate-500 text-xs italic">Tidak ada paket bawaan dengan filter tersebut.</div>
-                                                                ) : (
-                                                                    <div className="overflow-x-auto rounded-lg border border-slate-700/50">
-                                                                        <table className="w-full text-left text-[9px] md:text-[10px]">
-                                                                            <thead className="bg-slate-800 text-slate-400 border-b border-slate-700/50 uppercase tracking-wider">
-                                                                                <tr>
-                                                                                    <th className="py-2 px-3 font-bold">Resi & Tgl</th>
-                                                                                    <th className="py-2 px-3 font-bold">Olshop & Penerima</th>
-                                                                                    <th className="py-2 px-3 font-bold text-center">Status</th>
-                                                                                    <th className="py-2 px-3 font-bold text-right">Tagihan & Mtd</th>
-                                                                                    <th className="py-2 px-3 font-bold text-right">Brg (Hrg)</th>
-                                                                                    <th className="py-2 px-3 font-bold text-right">Ongkir (Dsr+Tmb)</th>
-                                                                                    <th className="py-2 px-3 font-bold text-center">Bukti</th>
-                                                                                </tr>
-                                                                            </thead>
-                                                                            <tbody className="divide-y divide-slate-700/30 bg-[#1e293b]/50">
-                                                                                {displayedPaket.map((pkg, pIdx) => {
-                                                                                    const { hBarang, tagihan, oDasar, oTambahan } = getFinancials(pkg);
-                                                                                    const isSukses = String(pkg.status).toLowerCase() === 'sukses';
-                                                                                    let displayTgl = String(pkg.dateString || pkg.tanggal || '-');
-                                                                                    if (displayTgl !== '-' && displayTgl.includes('T')) displayTgl = displayTgl.split('T')[0];
-
-                                                                                    return (
-                                                                                        <tr key={pIdx} className="hover:bg-slate-700/30 transition-colors">
-                                                                                            <td className="py-2 px-3 whitespace-nowrap">
-                                                                                                <div className="text-[#e65c00] font-mono font-bold bg-orange-900/20 px-1.5 py-0.5 rounded border border-orange-800/30 inline-block">{pkg.packageId}</div>
-                                                                                                <div className="text-slate-500 mt-1 text-[8px]"><i className="far fa-calendar-alt mr-1"></i>{displayTgl}</div>
-                                                                                            </td>
-                                                                                            <td className="py-2 px-3">
-                                                                                                <div className="text-slate-400 text-[8px] mb-0.5 truncate max-w-[120px] md:max-w-[200px]"><i className="fas fa-store mr-1"></i>{pkg.olshopName}</div>
-                                                                                                <div className="text-slate-200 font-bold truncate max-w-[120px] md:max-w-[200px]" title={pkg.customerName}>{pkg.customerName}</div>
-                                                                                                <div className="text-slate-500 text-[8px] mt-0.5 truncate max-w-[120px] md:max-w-[200px]"><i className="fas fa-map-marker-alt mr-1"></i>{pkg.address || '-'}</div>
-                                                                                            </td>
-                                                                                            <td className="py-2 px-3 text-center whitespace-nowrap">
-                                                                                                <StatusBadgeAdmin status={pkg.status} />
-                                                                                            </td>
-                                                                                            <td className="py-2 px-3 text-right whitespace-nowrap">
-                                                                                                <div className="text-slate-200 font-bold">{formatCurrency(tagihan)}</div>
-                                                                                                <div className="text-slate-500 text-[8px] font-bold mt-0.5 uppercase">{pkg.metodeBayar || '-'}</div>
-                                                                                            </td>
-                                                                                            <td className="py-2 px-3 text-right whitespace-nowrap">
-                                                                                                <div className={`font-bold ${isSukses ? 'text-emerald-400' : 'text-slate-400'}`}>{formatCurrency(hBarang)}</div>
-                                                                                            </td>
-                                                                                            <td className="py-2 px-3 text-right whitespace-nowrap">
-                                                                                                <div className={`font-bold ${isSukses ? 'text-red-400' : 'text-slate-400'}`} title="Ongkir Dasar">{formatCurrency(oDasar)}</div>
-                                                                                                <div className={`text-[8px] font-bold mt-0.5 ${isSukses ? 'text-orange-400' : 'text-slate-500'}`} title="Tambahan / Volume">+ {formatCurrency(oTambahan)}</div>
-                                                                                            </td>
-                                                                                            <td className="py-2 px-3 text-center whitespace-nowrap align-middle">
-                                                                                                {pkg.fotoBukti ? (
-                                                                                                    <div className="w-7 h-7 mx-auto rounded bg-slate-800 border border-slate-600 overflow-hidden cursor-pointer hover:opacity-80 transition-opacity" onClick={(e) => { e.stopPropagation(); setSelectedImage(`https://www.appsheet.com/template/gettablefileurl?appName=${APPSHEET_APP_ID}&tableName=InputPaket&fileName=${encodeURIComponent(pkg.fotoBukti)}`); }}>
-                                                                                                        <img src={`https://www.appsheet.com/template/gettablefileurl?appName=${APPSHEET_APP_ID}&tableName=InputPaket&fileName=${encodeURIComponent(pkg.fotoBukti)}`} className="w-full h-full object-cover" />
-                                                                                                    </div>
-                                                                                                ) : (
-                                                                                                    <div className="w-7 h-7 mx-auto rounded bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-500 text-[10px]"><i className="fas fa-image"></i></div>
-                                                                                                )}
-                                                                                            </td>
-                                                                                        </tr>
-                                                                                    );
-                                                                                })}
-                                                                            </tbody>
-                                                                        </table>
-                                                                    </div>
-                                                                )}
-                                                            </div>
-                                                        )}
+                                        {/* AKUMULASI LAPORAN KURIR */}
+                                        {kurirReport.length > 0 && (
+                                            <div className="flex flex-col border-t-2 border-blue-600/50 bg-slate-800/80 p-3 md:p-4 rounded-b-xl mt-1">
+                                                <div className="flex items-center justify-between">
+                                                    <div className="flex flex-col">
+                                                        <span className="font-black text-slate-200 uppercase text-xs md:text-sm">TOTAL KESELURUHAN KURIR</span>
+                                                        <span className="text-[10px] text-slate-400 font-bold">{kurirReport.reduce((acc, k) => acc + k.paketTerkait.length, 0)} Paket Ditangani</span>
                                                     </div>
-                                                );
-                                            })
+                                                    <div className="flex gap-4 md:gap-6">
+                                                        <div className="flex flex-col items-end">
+                                                            <span className="text-[8px] font-bold text-emerald-500/70 uppercase tracking-widest mb-0.5">TOTAL SUKSES</span>
+                                                            <span className="text-sm md:text-base font-black text-emerald-400">{kurirReport.reduce((acc, k) => acc + k.totalSukses, 0)} <span className="text-[9px] font-normal text-slate-400">Pkt</span></span>
+                                                        </div>
+                                                        <div className="flex flex-col items-end">
+                                                            <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">TOTAL SETORAN</span>
+                                                            <span className="text-sm md:text-base font-black text-white">{formatCurrency(kurirReport.reduce((acc, k) => acc + k.setoran, 0))}</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
                                         )}
                                     </div>
                                 </div>
