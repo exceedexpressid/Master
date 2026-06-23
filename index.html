@@ -21,7 +21,7 @@
     <script src="https://unpkg.com/@babel/standalone@7.22.20/babel.min.js"></script>
 
     <style>
-        body { touch-action: manipulation; background-color: #0f172a; font-family: 'Segoe UI', system-ui, sans-serif; color: #f8fafc; }
+        body { touch-action: manipulation; background-color: #0f172a; font-family: 'Segoe UI', system-ui, sans-serif; color: #f8fafc; overflow: hidden; }
         .scrollbar-hide::-webkit-scrollbar { display: none; }
         .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
         
@@ -36,7 +36,7 @@
             background-size: 1rem 1rem;
         }
 
-        /* Hilangkan Panah Spinner Input Number */
+        /* Input Number Hilangkan Panah Spinner */
         input[type=number]::-webkit-inner-spin-button, 
         input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
         input[type=number] { -moz-appearance: textfield; }
@@ -52,6 +52,12 @@
             -moz-appearance: none;
             appearance: none;
         }
+
+        /* Scrollbar kustom untuk modal agar bisa pakai kursor mouse di laptop */
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.5); border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #475569; }
     </style>
 </head>
 <body class="antialiased text-slate-200">
@@ -69,12 +75,6 @@
 
         const formatCurrency = (amount) => {
             return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(amount || 0);
-        };
-
-        const getTargetGaji = (kurirName) => {
-            const name = String(kurirName).toLowerCase();
-            if (name.includes('hamdan') || name.includes('agoy')) return 5600000;
-            return 4100000;
         };
 
         function App() {
@@ -122,14 +122,28 @@
                 kurirId: '', tanggal: ''
             });
 
-            // BIAYA OPERASIONAL & GAJI DINAMIS
+            // ==========================================
+            // BIAYA OPERASIONAL & GAJI DINAMIS (BARU)
+            // ==========================================
             const [opsCosts, setOpsCosts] = useState(() => loadLocal('exceed_ops_costs', { sewaKos: 0, biayaListrik: 0, biayaWifi: 0, akomodasi: 0, gajiAdmin: 0, lainLain: 0 }));
-            const [customSalaries, setCustomSalaries] = useState(() => loadLocal('exceed_custom_salaries', {}));
             const [workDays, setWorkDays] = useState(() => loadLocal('exceed_work_days', 26));
+
+            // State Gaji Harian per Kurir: { 'NAMA': { gajiHarian: 150000, tglMasuk: '2026-06-01', tglAkhir: '2026-06-26' } }
+            const [kurirSettings, setKurirSettings] = useState(() => loadLocal('exceed_kurir_settings', {}));
 
             const handleOpsChange = (field, value) => {
                 const numValue = value === '' ? '' : Number(value);
                 setOpsCosts(prev => ({ ...prev, [field]: numValue }));
+            };
+
+            const updateKurirSetting = (kurirName, field, value) => {
+                setKurirSettings(prev => ({
+                    ...prev,
+                    [kurirName]: {
+                        ...(prev[kurirName] || { gajiHarian: 150000, tglMasuk: '', tglAkhir: '' }),
+                        [field]: value
+                    }
+                }));
             };
 
             const toggleOlshop = (name) => setExpandedOlshops(prev => prev.includes(name) ? prev.filter(n => n !== name) : [...prev, name]);
@@ -139,8 +153,8 @@
             useEffect(() => { localStorage.setItem('exceed_master_logged_in', JSON.stringify(isMasterLoggedIn)); }, [isMasterLoggedIn]);
             useEffect(() => { localStorage.setItem('exceed_master_packages', JSON.stringify(packages)); }, [packages]);
             useEffect(() => { localStorage.setItem('exceed_ops_costs', JSON.stringify(opsCosts)); }, [opsCosts]);
-            useEffect(() => { localStorage.setItem('exceed_custom_salaries', JSON.stringify(customSalaries)); }, [customSalaries]);
             useEffect(() => { localStorage.setItem('exceed_work_days', JSON.stringify(workDays)); }, [workDays]);
+            useEffect(() => { localStorage.setItem('exceed_kurir_settings', JSON.stringify(kurirSettings)); }, [kurirSettings]);
 
             const getFinancials = (pkg) => {
                 const hBarang = Number(pkg.hargaPaket) || 0;
@@ -278,11 +292,11 @@
                     formData.append('packageId', editModal.packageId);
                     formData.append('olshopName', editModal.olshopName);
                     formData.append('status', editModal.status);
-                    formData.append('metodeBayar', editModal.metodeBayar);
+                    formData.append('metodeBayar', editModal.metodeBayar); // Jika '', akan dikirim kosong
                     formData.append('hargaPaket', editModal.hargaPaket);
-                    formData.append('ongkirKode', editModal.ongkirKode); // Kirim string TRF
+                    formData.append('ongkirKode', editModal.ongkirKode); 
                     formData.append('tambahanOngkir', editModal.tambahanOngkir);
-                    formData.append('kurirId', editModal.kurirId); // Kirim ID email
+                    formData.append('kurirId', editModal.kurirId); 
                     formData.append('tanggal', editModal.tanggal);
 
                     const response = await fetch(SCRIPT_URL, { method: 'POST', body: formData, headers: { 'Content-Type': 'application/x-www-form-urlencoded' } });
@@ -344,7 +358,7 @@
                     const { hBarang, oDasar, oTambahan, oTotal } = getFinancials(pkg);
 
                     if (!oReport[olshopName]) oReport[olshopName] = { totalSukses: 0, totalProses: 0, totalPending: 0, totalCancel: 0, pencairan: 0, potongan: 0, potonganDasar: 0, potonganTambahan: 0, totalDasar: 0, totalTambahan: 0, nilaiBarang: 0, nominalBelumCair: 0, paketBelumCairIds: [], paketBelumCairDetails: [], paketTerkait: [] };
-                    if (!kReport[kurirName]) kReport[kurirName] = { totalSukses: 0, totalProses: 0, totalPending: 0, totalCancel: 0, setoran: 0, rincianCash: 0, rincianMinusTf: 0, totalTfOlshop: 0, totalTfKantor: 0, totalTambahanOngkir: 0, tambahanOngkirCash: 0, tambahanOngkirTF: 0, paketTerkait: [], totalDasarOngkir: 0, profitPerusahaan: 0, targetGajiBase: 0 };
+                    if (!kReport[kurirName]) kReport[kurirName] = { totalSukses: 0, totalProses: 0, totalPending: 0, totalCancel: 0, setoran: 0, rincianCash: 0, rincianMinusTf: 0, totalTfOlshop: 0, totalTfKantor: 0, totalTambahanOngkir: 0, tambahanOngkirCash: 0, tambahanOngkirTF: 0, paketTerkait: [], totalDasarOngkir: 0, profitPerusahaan: 0 };
                     
                     oReport[olshopName].paketTerkait.push(pkg);
                     kReport[kurirName].paketTerkait.push(pkg);
@@ -362,7 +376,6 @@
                         kReport[kurirName].totalTambahanOngkir += oTambahan;
                         kReport[kurirName].totalDasarOngkir += oDasar;
                         kReport[kurirName].profitPerusahaan += oDasar; 
-                        kReport[kurirName].targetGajiBase = getTargetGaji(kurirName);
 
                         const isCair = String(pkg.statusPencairan).toLowerCase() === 'cair';
 
@@ -417,8 +430,9 @@
             const bebanOpsPerKurir = jumlahKurirAktif > 0 ? totalBiayaOperasional / jumlahKurirAktif : 0;
             
             const totalGajiKurirSeluruhnya = kurirReport.reduce((acc, kur) => {
-                const gaji = customSalaries[kur.name] !== undefined ? customSalaries[kur.name] : kur.targetGajiBase;
-                return acc + (Number(gaji) || 0);
+                const ks = kurirSettings[kur.name] || { gajiHarian: 150000, tglMasuk: '', tglAkhir: '' };
+                const hKerja = (ks.tglMasuk && ks.tglAkhir) ? Math.max(1, Math.ceil((new Date(ks.tglAkhir) - new Date(ks.tglMasuk)) / (1000 * 60 * 60 * 24)) + 1) : 0;
+                return acc + (hKerja * (Number(ks.gajiHarian) || 0));
             }, 0);
 
             const targetPerusahaanGlobal = totalBiayaOperasional + totalGajiKurirSeluruhnya;
@@ -469,8 +483,8 @@
             }
 
             return (
-                <div className="min-h-screen bg-[#0f172a] font-sans w-full mx-auto shadow-2xl relative flex flex-col">
-                    <header className="bg-[#1e293b] px-4 py-3 md:py-4 shadow-md z-10 sticky top-0 flex justify-between items-center border-b border-slate-700">
+                <div className="h-screen bg-[#0f172a] font-sans w-full mx-auto shadow-2xl relative flex flex-col">
+                    <header className="bg-[#1e293b] px-4 py-3 md:py-4 shadow-md z-10 sticky top-0 flex justify-between items-center border-b border-slate-700 shrink-0">
                         <div className="flex items-center">
                             <div className="w-8 h-8 md:w-10 md:h-10 bg-emerald-600 rounded-lg flex items-center justify-center mr-3 text-white shadow-sm">
                                 <i className="fas fa-crown text-sm md:text-base"></i>
@@ -485,7 +499,7 @@
                         </button>
                     </header>
 
-                    <div className="flex-1 overflow-y-auto p-3 md:p-5 lg:p-6 space-y-4 md:space-y-6 pb-10 max-w-7xl mx-auto w-full">
+                    <div className="flex-1 overflow-y-auto p-3 md:p-5 lg:p-6 space-y-4 md:space-y-6 pb-10 max-w-7xl mx-auto w-full custom-scrollbar">
                         
                         <div className="bg-[#1e293b] p-3 md:p-4 rounded-xl shadow-sm border border-slate-700 flex flex-col space-y-3">
                             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 w-full">
@@ -525,7 +539,7 @@
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
                             <div className="bg-gradient-to-br from-blue-600 to-blue-800 rounded-xl p-4 md:p-5 text-white shadow-md relative overflow-hidden">
                                 <div className="absolute -right-2 -bottom-4 opacity-20"><i className="fas fa-motorcycle text-[80px]"></i></div>
-                                <p className="text-blue-100 text-[10px] md:text-xs font-bold uppercase tracking-widest mb-1">TOTAL UANG OLSHOP TELAH CAIR</p>
+                                <p className="text-blue-100 text-[10px] md:text-xs font-bold uppercase tracking-widest mb-1">TOTAL UANG DI KURIR</p>
                                 <h2 className="text-2xl md:text-3xl font-black mb-2">{formatCurrency(globalSummary.totalSetoranKurir)}</h2>
                                 <p className="text-[9px] md:text-[10px] text-blue-100 flex items-center bg-black/20 w-fit px-2 py-1 rounded-md"><i className="fas fa-hand-holding-usd mr-1.5"></i> Tunai yang wajib disetor kurir</p>
                             </div>
@@ -537,7 +551,7 @@
                             </div>
                         </div>
 
-                        <div className="flex border-b border-slate-700 space-x-2 md:space-x-6 overflow-x-auto scrollbar-hide">
+                        <div className="flex border-b border-slate-700 space-x-2 md:space-x-6 overflow-x-auto scrollbar-hide shrink-0">
                             <button onClick={() => setActiveTab('gaji')} className={`shrink-0 pb-3 text-xs md:text-sm font-bold transition-colors ${activeTab === 'gaji' ? 'text-yellow-500 border-b-2 border-yellow-500' : 'text-slate-400 hover:text-slate-300'}`}>
                                 <i className="fas fa-bullseye mr-1.5"></i> Gaji & Target Ops
                             </button>
@@ -618,33 +632,33 @@
                                     <div className="p-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
                                         <div className="flex flex-col">
                                             <label className="text-[10px] font-bold text-slate-400 uppercase mb-1.5 ml-1"><i className="fas fa-home mr-1"></i> Sewa Kos</label>
-                                            <input type="number" min="0" value={opsCosts.sewaKos} onChange={(e) => handleOpsChange('sewaKos', e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white font-bold outline-none focus:border-yellow-500 focus:ring-1 focus:ring-yellow-500/50" />
+                                            <input type="number" min="0" value={opsCosts.sewaKos} onChange={(e) => handleOpsChange('sewaKos', e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white font-bold outline-none focus:border-yellow-500" />
                                         </div>
                                         <div className="flex flex-col">
                                             <label className="text-[10px] font-bold text-slate-400 uppercase mb-1.5 ml-1"><i className="fas fa-bolt mr-1"></i> Listrik</label>
-                                            <input type="number" min="0" value={opsCosts.biayaListrik} onChange={(e) => handleOpsChange('biayaListrik', e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white font-bold outline-none focus:border-yellow-500 focus:ring-1 focus:ring-yellow-500/50" />
+                                            <input type="number" min="0" value={opsCosts.biayaListrik} onChange={(e) => handleOpsChange('biayaListrik', e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white font-bold outline-none focus:border-yellow-500" />
                                         </div>
                                         <div className="flex flex-col">
                                             <label className="text-[10px] font-bold text-slate-400 uppercase mb-1.5 ml-1"><i className="fas fa-wifi mr-1"></i> Internet Wifi</label>
-                                            <input type="number" min="0" value={opsCosts.biayaWifi} onChange={(e) => handleOpsChange('biayaWifi', e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white font-bold outline-none focus:border-yellow-500 focus:ring-1 focus:ring-yellow-500/50" />
+                                            <input type="number" min="0" value={opsCosts.biayaWifi} onChange={(e) => handleOpsChange('biayaWifi', e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white font-bold outline-none focus:border-yellow-500" />
                                         </div>
                                         <div className="flex flex-col">
                                             <label className="text-[10px] font-bold text-slate-400 uppercase mb-1.5 ml-1"><i className="fas fa-gas-pump mr-1"></i> Akomodasi</label>
-                                            <input type="number" min="0" value={opsCosts.akomodasi} onChange={(e) => handleOpsChange('akomodasi', e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white font-bold outline-none focus:border-yellow-500 focus:ring-1 focus:ring-yellow-500/50" />
+                                            <input type="number" min="0" value={opsCosts.akomodasi} onChange={(e) => handleOpsChange('akomodasi', e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white font-bold outline-none focus:border-yellow-500" />
                                         </div>
                                         <div className="flex flex-col">
                                             <label className="text-[10px] font-bold text-slate-400 uppercase mb-1.5 ml-1"><i className="fas fa-user-tie mr-1"></i> Gaji Admin</label>
-                                            <input type="number" min="0" value={opsCosts.gajiAdmin} onChange={(e) => handleOpsChange('gajiAdmin', e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white font-bold outline-none focus:border-yellow-500 focus:ring-1 focus:ring-yellow-500/50" />
+                                            <input type="number" min="0" value={opsCosts.gajiAdmin} onChange={(e) => handleOpsChange('gajiAdmin', e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white font-bold outline-none focus:border-yellow-500" />
                                         </div>
                                         <div className="flex flex-col">
                                             <label className="text-[10px] font-bold text-slate-400 uppercase mb-1.5 ml-1"><i className="fas fa-ellipsis-h mr-1"></i> Lain-lain</label>
-                                            <input type="number" min="0" value={opsCosts.lainLain} onChange={(e) => handleOpsChange('lainLain', e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white font-bold outline-none focus:border-yellow-500 focus:ring-1 focus:ring-yellow-500/50" />
+                                            <input type="number" min="0" value={opsCosts.lainLain} onChange={(e) => handleOpsChange('lainLain', e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white font-bold outline-none focus:border-yellow-500" />
                                         </div>
                                     </div>
                                 </div>
 
                                 <div className="bg-[#1e293b] rounded-xl shadow-sm border border-slate-700 overflow-hidden">
-                                    <div className="overflow-x-auto scrollbar-hide">
+                                    <div className="overflow-x-auto custom-scrollbar">
                                         <div className="min-w-[1050px] flex flex-col">
                                             {kurirReport.length === 0 ? (
                                                 <div className="p-8 text-center text-slate-500">Tidak ada data kurir di periode ini.</div>
@@ -661,8 +675,10 @@
                                             )}
                                             
                                             {[...kurirReport].map((kur, idx) => {
-                                                const gajiPokokRaw = customSalaries[kur.name] !== undefined ? customSalaries[kur.name] : kur.targetGajiBase;
-                                                const targetGajiFinal = Number(gajiPokokRaw) || 0;
+                                                const ks = kurirSettings[kur.name] || { gajiHarian: 150000, tglMasuk: '', tglAkhir: '' };
+                                                const hKerja = (ks.tglMasuk && ks.tglAkhir) ? Math.max(1, Math.ceil((new Date(ks.tglAkhir) - new Date(ks.tglMasuk)) / (1000 * 60 * 60 * 24)) + 1) : 0;
+                                                const targetGajiFinal = hKerja * (Number(ks.gajiHarian) || 0);
+                                                
                                                 const targetFinal = targetGajiFinal + bebanOpsPerKurir;
                                                 const pencapaian = kur.profitPerusahaan; 
                                                 const isTercapai = pencapaian >= targetFinal;
@@ -681,19 +697,35 @@
                                                         </div>
 
                                                         <div className="flex flex-col gap-1 pr-2 border-r border-slate-700/50">
+                                                            {/* Gaji Harian Input */}
                                                             <div className="flex justify-between items-center text-[10px] mb-0.5">
-                                                                <span className="text-slate-500">Gaji Pokok</span>
-                                                                <div className="flex items-center">
-                                                                    <input 
-                                                                        type="number" 
-                                                                        value={gajiPokokRaw} 
-                                                                        onChange={(e) => setCustomSalaries(prev => ({...prev, [kur.name]: e.target.value === '' ? '' : Number(e.target.value)}))}
-                                                                        className="w-16 md:w-20 bg-slate-900 border border-slate-600 rounded px-1.5 py-0.5 text-right text-slate-200 font-bold outline-none focus:border-yellow-500 focus:ring-1 focus:ring-yellow-500/50" 
-                                                                    />
+                                                                <span className="text-slate-500">Gaji Harian</span>
+                                                                <input 
+                                                                    type="number" 
+                                                                    value={ks.gajiHarian} 
+                                                                    onChange={(e) => updateKurirSetting(kur.name, 'gajiHarian', e.target.value)}
+                                                                    className="w-16 md:w-20 bg-slate-900 border border-slate-600 rounded px-1.5 py-0.5 text-right text-slate-200 font-bold outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/50" 
+                                                                />
+                                                            </div>
+                                                            {/* Tgl Masuk & Akhir */}
+                                                            <div className="flex flex-col gap-0.5 text-[9px] mb-1">
+                                                                <div className="flex justify-between items-center">
+                                                                    <span className="text-slate-500">Tgl Masuk</span>
+                                                                    <input type="date" value={ks.tglMasuk} onChange={(e) => updateKurirSetting(kur.name, 'tglMasuk', e.target.value)} className="bg-slate-900 border border-slate-600 rounded px-1 py-0.5 text-slate-200 outline-none w-[90px]" />
+                                                                </div>
+                                                                <div className="flex justify-between items-center">
+                                                                    <span className="text-slate-500">Tgl Akhir</span>
+                                                                    <input type="date" value={ks.tglAkhir} onChange={(e) => updateKurirSetting(kur.name, 'tglAkhir', e.target.value)} className="bg-slate-900 border border-slate-600 rounded px-1 py-0.5 text-slate-200 outline-none w-[90px]" />
                                                                 </div>
                                                             </div>
+                                                            {/* Akumulasi Hari & Total Gaji */}
+                                                            <div className="flex justify-between items-center text-[10px] bg-slate-900/50 p-1 rounded mb-1">
+                                                                <span className="text-slate-400">Kerja: <b className="text-white">{hKerja} Hari</b></span>
+                                                                <span className="text-emerald-400 font-bold">{formatCurrency(targetGajiFinal)}</span>
+                                                            </div>
+
                                                             <div className="flex justify-between items-center text-[10px]">
-                                                                <span className="text-slate-500">Beban Ops</span>
+                                                                <span className="text-slate-500">Beban Ops Global</span>
                                                                 <span className="text-orange-400 font-bold">+{formatCurrency(bebanOpsPerKurir)}</span>
                                                             </div>
                                                             <div className="flex justify-between items-center text-[11px] mt-1 pt-1 border-t border-slate-700">
@@ -767,7 +799,7 @@
                                     </div>
                                 </div>
                                 
-                                <div className="overflow-x-auto scrollbar-hide">
+                                <div className="overflow-x-auto custom-scrollbar">
                                     <div className="min-w-[850px] flex flex-col">
                                         {kurirReport.length === 0 ? (
                                             <div className="p-8 text-center text-slate-500">Tidak ada data profit di periode ini.</div>
@@ -821,7 +853,7 @@
                                     <h3 className="font-bold text-slate-200 text-xs md:text-sm">Rekapitulasi Pencairan Olshop <span className="text-[10px] text-slate-400 font-normal ml-2">(Klik baris untuk rincian)</span></h3>
                                 </div>
                                 
-                                <div className="overflow-x-auto scrollbar-hide">
+                                <div className="overflow-x-auto custom-scrollbar">
                                     <div className="min-w-[1000px] flex flex-col">
                                         {olshopReport.length === 0 ? (
                                             <div className="p-8 text-center text-slate-500">Tidak ada transaksi di periode/status ini.</div>
@@ -905,7 +937,7 @@
                                                                 {displayedPaket.length === 0 ? (
                                                                     <div className="text-center py-4 text-slate-500 text-xs italic">Tidak ada paket dengan filter tersebut.</div>
                                                                 ) : (
-                                                                    <div className="overflow-x-auto rounded-lg border border-slate-700/50">
+                                                                    <div className="overflow-x-auto rounded-lg border border-slate-700/50 custom-scrollbar">
                                                                         <table className="w-full text-left text-[9px] md:text-[10px]">
                                                                             <thead className="bg-slate-800 text-slate-400 border-b border-slate-700/50 uppercase tracking-wider">
                                                                                 <tr>
@@ -995,156 +1027,6 @@
                                 </div>
                             </div>
                         )}
-
-                        {activeTab === 'kurir' && (
-                            <div className="bg-[#1e293b] rounded-xl shadow-sm border border-slate-700 overflow-hidden animate-fade-in-down">
-                                <div className="p-3 md:p-4 border-b border-slate-700 bg-slate-800/50 flex justify-between items-center">
-                                    <h3 className="font-bold text-slate-200 text-xs md:text-sm">Rekapitulasi Uang Setoran Kurir <span className="text-[10px] text-slate-400 font-normal ml-2">(Klik baris untuk rincian bawaan)</span></h3>
-                                </div>
-                                
-                                <div className="overflow-x-auto scrollbar-hide">
-                                    <div className="min-w-[1050px] flex flex-col">
-                                        {kurirReport.length === 0 ? (
-                                            <div className="p-8 text-center text-slate-500">Tidak ada kinerja kurir di periode/status ini.</div>
-                                        ) : (
-                                            kurirReport.map((kur, idx) => {
-                                                const isExpanded = expandedKurirs.includes(kur.name);
-                                                const currentFilter = kurirFilters[kur.name] || 'semua';
-                                                
-                                                const displayedPaket = kur.paketTerkait.filter(pkg => {
-                                                    if (currentFilter === 'semua') return true;
-                                                    let stat = String(pkg.status).toLowerCase().replace(' ', '_');
-                                                    if (currentFilter === 'proses') return stat === 'siap_antar' || stat === 'proses';
-                                                    return stat === currentFilter;
-                                                });
-
-                                                return (
-                                                    <div key={idx} className="flex flex-col border-b border-slate-700/50 hover:bg-slate-800/30 transition-colors">
-                                                        <div 
-                                                            className="flex items-center justify-between p-3 md:p-4 cursor-pointer"
-                                                            onClick={() => toggleKurir(kur.name)}
-                                                        >
-                                                            <div className="flex flex-col gap-1 w-[200px] md:w-[300px] shrink-0">
-                                                                <div className="flex items-center gap-2.5">
-                                                                    <div className={`w-5 h-5 rounded flex items-center justify-center transition-transform ${isExpanded ? 'bg-blue-500 text-white rotate-180' : 'bg-slate-700 text-slate-400'}`}><i className="fas fa-chevron-down text-[10px]"></i></div>
-                                                                    <i className="fas fa-motorcycle text-blue-400/80"></i>
-                                                                    <span className="font-bold text-slate-200 uppercase truncate text-xs md:text-sm">{kur.name}</span>
-                                                                    <span className="text-[9px] bg-slate-700 text-slate-300 px-2 py-0.5 rounded shrink-0 font-bold">{kur.paketTerkait.length} Pkt</span>
-                                                                </div>
-                                                                <div className="flex gap-2 ml-7 mt-0.5">
-                                                                    <span className="text-[9px] text-emerald-400 font-bold" title="Sukses"><i className="fas fa-check-circle mr-1"></i>{kur.totalSukses}</span>
-                                                                    <span className="text-[9px] text-blue-400 font-bold" title="Proses"><i className="fas fa-truck mr-1"></i>{kur.totalProses}</span>
-                                                                    <span className="text-[9px] text-orange-400 font-bold" title="Pending"><i className="fas fa-clock mr-1"></i>{kur.totalPending}</span>
-                                                                    <span className="text-[9px] text-red-400 font-bold" title="Cancel"><i className="fas fa-times-circle mr-1"></i>{kur.totalCancel}</span>
-                                                                </div>
-                                                            </div>
-                                                            <div className="flex-1 flex justify-end items-center gap-4 md:gap-5">
-                                                                <div className="flex flex-col items-end justify-center min-w-[70px]"><span className="text-[8px] font-bold text-emerald-500/70 uppercase tracking-widest mb-0.5">UANG CASH</span><span className="text-xs md:text-sm font-black text-emerald-400">+{formatCurrency(kur.rincianCash)}</span></div>
-                                                                <div className="flex flex-col items-end justify-center min-w-[70px]" title="Hak ongkir tambahan kurir dari paket CASH (Langsung dikantongi)"><span className="text-[8px] font-bold text-orange-400/80 uppercase tracking-widest mb-0.5">SIMPAN (CASH)</span><span className="text-xs md:text-sm font-black text-orange-400">-{formatCurrency(kur.tambahanOngkirCash)}</span></div>
-                                                                <div className="flex flex-col items-end justify-center min-w-[70px]" title="Hak ongkir tambahan kurir dari paket TF (Dibayar kantor dengan memotong setoran)"><span className="text-[8px] font-bold text-purple-400/80 uppercase tracking-widest mb-0.5">POTONG (TF)</span><span className="text-xs md:text-sm font-black text-purple-400">-{formatCurrency(kur.tambahanOngkirTF)}</span></div>
-                                                                <div className="flex flex-col items-end justify-center min-w-[80px] pl-2 border-l border-slate-700"><span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">WAJIB SETOR</span><span className={`text-[13px] md:text-[15px] font-black ${kur.setoran >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>{formatCurrency(kur.setoran)}</span></div>
-                                                            </div>
-                                                        </div>
-                                                        {isExpanded && (
-                                                            <div className="p-3 md:p-4 bg-[#0f172a]/60 animate-fade-in-down border-t border-slate-700/50">
-                                                                <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-3 gap-3">
-                                                                    <h4 className="text-slate-400 font-bold text-[10px] uppercase tracking-widest flex items-center"><i className="fas fa-boxes mr-2"></i>Rincian Bawaan: {kur.name}</h4>
-                                                                    <div className="flex flex-wrap gap-1.5">
-                                                                        {[{id:'semua', label:'Semua'}, {id:'sukses', label:'Sukses'}, {id:'proses', label:'Proses'}, {id:'pending', label:'Pending'}, {id:'cancel', label:'Cancel'}].map(f => (
-                                                                            <button key={f.id} onClick={(e) => { e.stopPropagation(); setKurirFilters(prev => ({...prev, [kur.name]: f.id})); }}
-                                                                                className={`px-2.5 py-1 rounded text-[9px] font-bold uppercase transition-colors border ${currentFilter === f.id ? 'bg-blue-500 text-white border-blue-500' : 'bg-slate-800 text-slate-400 border-slate-600 hover:bg-slate-700'}`}>
-                                                                                {f.label}
-                                                                            </button>
-                                                                        ))}
-                                                                    </div>
-                                                                </div>
-                                                                
-                                                                {displayedPaket.length === 0 ? (
-                                                                    <div className="text-center py-4 text-slate-500 text-xs italic">Tidak ada paket bawaan dengan filter tersebut.</div>
-                                                                ) : (
-                                                                    <div className="overflow-x-auto rounded-lg border border-slate-700/50">
-                                                                        <table className="w-full text-left text-[9px] md:text-[10px]">
-                                                                            <thead className="bg-slate-800 text-slate-400 border-b border-slate-700/50 uppercase tracking-wider">
-                                                                                <tr>
-                                                                                    <th className="py-2 px-3 font-bold">Resi & Tgl</th>
-                                                                                    <th className="py-2 px-3 font-bold">Olshop & Penerima</th>
-                                                                                    <th className="py-2 px-3 font-bold text-center">Status</th>
-                                                                                    <th className="py-2 px-3 font-bold text-right">Tagihan & Mtd</th>
-                                                                                    <th className="py-2 px-3 font-bold text-right">Brg (Hrg)</th>
-                                                                                    <th className="py-2 px-3 font-bold text-right">Ongkir (Dsr+Tmb)</th>
-                                                                                    <th className="py-2 px-3 font-bold text-center">Aksi / Bukti</th>
-                                                                                </tr>
-                                                                            </thead>
-                                                                            <tbody className="divide-y divide-slate-700/30 bg-[#1e293b]/50">
-                                                                                {displayedPaket.map((pkg, pIdx) => {
-                                                                                    const { hBarang, tagihan, oDasar, oTambahan } = getFinancials(pkg);
-                                                                                    const isSukses = String(pkg.status).toLowerCase() === 'sukses';
-                                                                                    let displayTgl = String(pkg.dateString || pkg.tanggal || '-');
-                                                                                    if (displayTgl !== '-' && displayTgl.includes('T')) displayTgl = displayTgl.split('T')[0];
-
-                                                                                    return (
-                                                                                        <tr key={pIdx} className="hover:bg-slate-700/30 transition-colors">
-                                                                                            <td className="py-2 px-3 whitespace-nowrap">
-                                                                                                <div className="text-[#e65c00] font-mono font-bold bg-orange-900/20 px-1.5 py-0.5 rounded border border-orange-800/30 inline-block">{pkg.packageId}</div>
-                                                                                                <div className="text-slate-500 mt-1 text-[8px]"><i className="far fa-calendar-alt mr-1"></i>{displayTgl}</div>
-                                                                                            </td>
-                                                                                            <td className="py-2 px-3">
-                                                                                                <div className="text-slate-400 text-[8px] mb-0.5 truncate max-w-[120px] md:max-w-[200px]"><i className="fas fa-store mr-1"></i>{pkg.olshopName}</div>
-                                                                                                <div className="text-slate-200 font-bold truncate max-w-[120px] md:max-w-[200px]" title={pkg.customerName}>{pkg.customerName}</div>
-                                                                                                <div className="text-slate-500 text-[8px] mt-0.5 truncate max-w-[120px] md:max-w-[200px]"><i className="fas fa-map-marker-alt mr-1"></i>{pkg.address || '-'}</div>
-                                                                                            </td>
-                                                                                            <td className="py-2 px-3 text-center whitespace-nowrap">
-                                                                                                <StatusBadgeAdmin status={pkg.status} />
-                                                                                            </td>
-                                                                                            <td className="py-2 px-3 text-right whitespace-nowrap">
-                                                                                                <div className="text-slate-200 font-bold">{formatCurrency(tagihan)}</div>
-                                                                                                <div className="text-slate-500 text-[8px] font-bold mt-0.5 uppercase">{pkg.metodeBayar || '-'}</div>
-                                                                                            </td>
-                                                                                            <td className="py-2 px-3 text-right whitespace-nowrap">
-                                                                                                <div className={`font-bold ${isSukses ? 'text-emerald-400' : 'text-slate-400'}`}>{formatCurrency(hBarang)}</div>
-                                                                                            </td>
-                                                                                            <td className="py-2 px-3 text-right whitespace-nowrap">
-                                                                                                <div className={`font-bold ${isSukses ? 'text-red-400' : 'text-slate-400'}`} title="Ongkir Dasar">{formatCurrency(oDasar)}</div>
-                                                                                                <div className={`text-[8px] font-bold mt-0.5 ${isSukses ? 'text-orange-400' : 'text-slate-500'}`} title="Tambahan / Volume">+ {formatCurrency(oTambahan)}</div>
-                                                                                            </td>
-                                                                                            <td className="py-2 px-3 text-center align-middle">
-                                                                                                <div className="flex flex-col items-center justify-center gap-1.5">
-                                                                                                    {pkg.fotoBukti ? (
-                                                                                                        <div 
-                                                                                                            className="w-14 h-14 md:w-16 md:h-16 mx-auto rounded-md bg-slate-800 border border-slate-600 overflow-hidden cursor-pointer hover:opacity-80 transition-opacity shadow-sm" 
-                                                                                                            onClick={(e) => { e.stopPropagation(); setSelectedImage(getFotoUrl(pkg)); }}
-                                                                                                            title="Klik untuk perbesar"
-                                                                                                        >
-                                                                                                            <img src={getFotoUrl(pkg)} className="w-full h-full object-cover" alt="Bukti" />
-                                                                                                        </div>
-                                                                                                    ) : (
-                                                                                                        <div className="w-14 h-14 md:w-16 md:h-16 mx-auto rounded-md bg-slate-800/50 border border-slate-700 border-dashed flex flex-col items-center justify-center text-slate-500" title="Tidak Ada Foto">
-                                                                                                            <i className="fas fa-image text-xs mb-1"></i>
-                                                                                                            <span className="text-[8px] font-bold">NO FOTO</span>
-                                                                                                        </div>
-                                                                                                    )}
-                                                                                                    <button onClick={(e) => { e.stopPropagation(); openEditModal(pkg); }} className="w-full max-w-[80px] py-1 rounded bg-blue-600/20 border border-blue-500/30 hover:bg-blue-600 hover:text-white text-blue-400 flex items-center justify-center transition-colors shadow-sm mt-1" title="Edit Paket">
-                                                                                                        <i className="fas fa-edit text-[10px] mr-1.5"></i> <span className="text-[10px] font-bold">Edit</span>
-                                                                                                    </button>
-                                                                                                </div>
-                                                                                            </td>
-                                                                                        </tr>
-                                                                                    );
-                                                                                })}
-                                                                            </tbody>
-                                                                        </table>
-                                                                    </div>
-                                                                )}
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                );
-                                            })
-                                        )}
-                                    </div>
-                                </div>
-                            </div>
-                        )}
                     </div>
 
                     {/* MODAL KONFIRMASI CAIRKAN */}
@@ -1182,16 +1064,16 @@
                         </div>
                     )}
 
-                    {/* MODAL EDIT DATA PAKET (TERBARU DENGAN DROP-DOWN MURNI) */}
+                    {/* MODAL EDIT DATA PAKET (TERBARU DENGAN DROP-DOWN & SCROLL FIX) */}
                     {isEditModalOpen && (
                         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in-down">
-                            <div className="bg-[#1e293b] rounded-2xl border border-slate-700 shadow-2xl w-full max-w-lg overflow-hidden">
-                                <div className="p-4 md:p-5 border-b border-slate-700 bg-slate-800 flex justify-between items-center">
+                            <div className="bg-[#1e293b] rounded-2xl border border-slate-700 shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[95vh]">
+                                <div className="p-4 md:p-5 border-b border-slate-700 bg-slate-800 flex justify-between items-center shrink-0">
                                     <h3 className="font-bold text-white flex items-center"><i className="fas fa-edit text-blue-500 mr-2"></i> Edit Data Paket</h3>
-                                    <button onClick={() => setIsEditModalOpen(false)} className="text-slate-400 hover:text-white transition-colors"><i className="fas fa-times"></i></button>
+                                    <button onClick={() => setIsEditModalOpen(false)} className="text-slate-400 hover:text-white transition-colors"><i className="fas fa-times text-xl"></i></button>
                                 </div>
                                 
-                                <form onSubmit={handleEditSubmit} className="p-4 md:p-5 space-y-4 max-h-[75vh] overflow-y-auto scrollbar-hide">
+                                <form onSubmit={handleEditSubmit} className="p-4 md:p-5 space-y-4 overflow-y-auto custom-scrollbar flex-1">
                                     <div className="bg-slate-900 p-3 rounded-lg border border-slate-700 text-center mb-2">
                                         <span className="text-xs text-slate-400 font-bold uppercase tracking-widest">Resi Pengiriman</span>
                                         <h2 className="text-lg font-black text-blue-400 font-mono tracking-widest">{editModal.packageId}</h2>
@@ -1204,7 +1086,7 @@
                                             <select 
                                                 value={editModal.olshopName}
                                                 onChange={(e) => setEditModal({...editModal, olshopName: e.target.value})}
-                                                className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white font-bold outline-none focus:border-blue-500"
+                                                className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white font-bold outline-none focus:border-blue-500 cursor-pointer"
                                             >
                                                 <option value="">-- Pilih Olshop --</option>
                                                 {!masterOlshops.some(o => o.nama === editModal.olshopName) && editModal.olshopName && (
@@ -1220,7 +1102,7 @@
                                             <select 
                                                 value={editModal.kurirId}
                                                 onChange={(e) => setEditModal({...editModal, kurirId: e.target.value})}
-                                                className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white font-bold outline-none focus:border-blue-500"
+                                                className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white font-bold outline-none focus:border-blue-500 cursor-pointer"
                                             >
                                                 <option value="">-- Pilih Kurir --</option>
                                                 {!masterKurirs.some(k => k.id === editModal.kurirId) && editModal.kurirId && (
@@ -1236,7 +1118,7 @@
                                             <select 
                                                 value={editModal.status}
                                                 onChange={(e) => setEditModal({...editModal, status: e.target.value})}
-                                                className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white font-bold outline-none focus:border-blue-500"
+                                                className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white font-bold outline-none focus:border-blue-500 cursor-pointer"
                                             >
                                                 <option value="SUKSES">Sukses</option>
                                                 <option value="SIAP_ANTAR">Proses (Siap Antar)</option>
@@ -1251,7 +1133,7 @@
                                             <select 
                                                 value={editModal.metodeBayar}
                                                 onChange={(e) => setEditModal({...editModal, metodeBayar: e.target.value})}
-                                                className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white font-bold outline-none focus:border-blue-500"
+                                                className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white font-bold outline-none focus:border-blue-500 cursor-pointer"
                                             >
                                                 <option value="">-- KOSONG / BELUM ADA --</option>
                                                 <option value="CASH">CASH</option>
@@ -1278,7 +1160,7 @@
                                             <select 
                                                 value={editModal.ongkirKode}
                                                 onChange={(e) => handleOngkirKodeChange(e.target.value)}
-                                                className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white font-bold outline-none focus:border-blue-500"
+                                                className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white font-bold outline-none focus:border-blue-500 cursor-pointer"
                                             >
                                                 <option value="">-- Pilih TRF / ZONA --</option>
                                                 {!masterZonas.some(z => z.id === editModal.ongkirKode) && editModal.ongkirKode && (
@@ -1312,12 +1194,12 @@
                                         </div>
                                     </div>
 
-                                    <div className="bg-blue-900/20 border border-blue-500/30 p-3 rounded-xl mt-2 text-center">
+                                    <div className="bg-blue-900/20 border border-blue-500/30 p-3 rounded-xl mt-2 text-center shrink-0">
                                         <span className="text-[10px] text-blue-400 font-bold uppercase tracking-widest mb-1 block">Estimasi Tagihan Resi</span>
                                         <h3 className="text-2xl font-black text-white">{formatCurrency(Number(editModal.hargaPaket) + Number(editModal.ongkirDasar) + Number(editModal.tambahanOngkir))}</h3>
                                     </div>
 
-                                    <div className="flex gap-3 pt-4 border-t border-slate-700">
+                                    <div className="flex gap-3 pt-4 border-t border-slate-700 shrink-0">
                                         <button type="button" onClick={() => setIsEditModalOpen(false)} disabled={isProcessingEdit} className="flex-1 py-3 rounded-xl font-bold text-slate-300 bg-slate-700 hover:bg-slate-600 transition-colors">Batal</button>
                                         <button type="submit" disabled={isProcessingEdit} className="flex-1 py-3 rounded-xl font-bold text-white bg-blue-600 hover:bg-blue-500 transition-colors flex justify-center items-center shadow-lg shadow-blue-900/50">
                                             {isProcessingEdit ? <><i className="fas fa-spinner fa-spin mr-2"></i> Menyimpan...</> : <><i className="fas fa-save mr-2"></i> Simpan Edit</>}
