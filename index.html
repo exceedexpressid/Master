@@ -17,11 +17,11 @@
     <!-- React & ReactDOM -->
     <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
-    <!-- Babel (Versi Stabil 7.22.20) -->
+    <!-- Babel -->
     <script src="https://unpkg.com/@babel/standalone@7.22.20/babel.min.js"></script>
 
     <style>
-        body { touch-action: manipulation; background-color: #0f172a; font-family: 'Segoe UI', system-ui, sans-serif; color: #f8fafc; overflow: hidden; }
+        body { touch-action: manipulation; background-color: #0b1120; font-family: 'Segoe UI', system-ui, sans-serif; color: #f8fafc; overflow: hidden; }
         .scrollbar-hide::-webkit-scrollbar { display: none; }
         .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
         
@@ -41,23 +41,27 @@
         input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
         input[type=number] { -moz-appearance: textfield; }
         
-        /* Ubah warna panah dropdown/select */
-        select {
-            background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%239ca3af' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
-            background-position: right 0.5rem center;
-            background-repeat: no-repeat;
-            background-size: 1.5em 1.5em;
-            padding-right: 2.5rem;
-            -webkit-appearance: none;
-            -moz-appearance: none;
-            appearance: none;
-        }
-
-        /* Scrollbar kustom untuk modal agar bisa pakai kursor mouse di laptop */
-        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        /* Custom scrollbar */
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.5); border-radius: 4px; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #475569; }
+
+        /* Card background icons */
+        .card-bg-icon {
+            position: absolute;
+            right: -10px;
+            bottom: -20px;
+            font-size: 120px;
+            opacity: 0.15;
+            transform: rotate(-10deg);
+            pointer-events: none;
+        }
+        
+        /* Darker theme base */
+        .bg-app-dark { background-color: #111827; }
+        .bg-panel-dark { background-color: #1f2937; }
+        .border-panel { border-color: #374151; }
     </style>
 </head>
 <body class="antialiased text-slate-200">
@@ -82,6 +86,7 @@
             const APPSHEET_APP_ID = "APLIKASEXCEED-327461285";
 
             const [isMasterLoggedIn, setIsMasterLoggedIn] = useState(() => loadLocal('exceed_master_logged_in', false));
+            const [layoutMode, setLayoutMode] = useState(() => loadLocal('exceed_layout_mode', 'android')); // android or web
             const [isLoadingSync, setIsLoadingSync] = useState(false);
             const [syncMessage, setSyncMessage] = useState({ text: '', type: '' });
             
@@ -111,9 +116,6 @@
             const [selectedOlshopToCairkan, setSelectedOlshopToCairkan] = useState(null);
             const [isProcessingCair, setIsProcessingCair] = useState(false);
 
-            // ==========================================
-            // STATE FITUR EDIT PAKET
-            // ==========================================
             const [isEditModalOpen, setIsEditModalOpen] = useState(false);
             const [isProcessingEdit, setIsProcessingEdit] = useState(false);
             const [editModal, setEditModal] = useState({
@@ -122,12 +124,16 @@
                 kurirId: '', tanggal: ''
             });
 
-            // BIAYA OPERASIONAL & GAJI DINAMIS
             const [opsCosts, setOpsCosts] = useState(() => loadLocal('exceed_ops_costs', { sewaKos: 0, biayaListrik: 0, biayaWifi: 0, akomodasi: 0, gajiAdmin: 0, lainLain: 0 }));
             const [workDays, setWorkDays] = useState(() => loadLocal('exceed_work_days', 26));
-
-            // State Gaji Harian per Kurir: { 'NAMA': { gajiHarian: 150000, tglMasuk: '2026-06-01', tglAkhir: '2026-06-26', hariLibur: 0 } }
             const [kurirSettings, setKurirSettings] = useState(() => loadLocal('exceed_kurir_settings', {}));
+
+            useEffect(() => { localStorage.setItem('exceed_master_logged_in', JSON.stringify(isMasterLoggedIn)); }, [isMasterLoggedIn]);
+            useEffect(() => { localStorage.setItem('exceed_layout_mode', JSON.stringify(layoutMode)); }, [layoutMode]);
+            useEffect(() => { localStorage.setItem('exceed_master_packages', JSON.stringify(packages)); }, [packages]);
+            useEffect(() => { localStorage.setItem('exceed_ops_costs', JSON.stringify(opsCosts)); }, [opsCosts]);
+            useEffect(() => { localStorage.setItem('exceed_work_days', JSON.stringify(workDays)); }, [workDays]);
+            useEffect(() => { localStorage.setItem('exceed_kurir_settings', JSON.stringify(kurirSettings)); }, [kurirSettings]);
 
             const handleOpsChange = (field, value) => {
                 const numValue = value === '' ? '' : Number(value);
@@ -147,12 +153,6 @@
             const toggleOlshop = (name) => setExpandedOlshops(prev => prev.includes(name) ? prev.filter(n => n !== name) : [...prev, name]);
             const toggleKurir = (name) => setExpandedKurirs(prev => prev.includes(name) ? prev.filter(n => n !== name) : [...prev, name]);
             const openCairkanModal = (olshop) => { setSelectedOlshopToCairkan(olshop); setIsCairkanModalOpen(true); };
-
-            useEffect(() => { localStorage.setItem('exceed_master_logged_in', JSON.stringify(isMasterLoggedIn)); }, [isMasterLoggedIn]);
-            useEffect(() => { localStorage.setItem('exceed_master_packages', JSON.stringify(packages)); }, [packages]);
-            useEffect(() => { localStorage.setItem('exceed_ops_costs', JSON.stringify(opsCosts)); }, [opsCosts]);
-            useEffect(() => { localStorage.setItem('exceed_work_days', JSON.stringify(workDays)); }, [workDays]);
-            useEffect(() => { localStorage.setItem('exceed_kurir_settings', JSON.stringify(kurirSettings)); }, [kurirSettings]);
 
             const getFinancials = (pkg) => {
                 const hBarang = Number(pkg.hargaPaket) || 0;
@@ -219,7 +219,7 @@
                 if (validUser1 || validUser2) {
                     setIsMasterLoggedIn(true);
                     setLoginUname(''); setLoginPass('');
-                    syncData();
+                    syncData(true);
                 } else {
                     setSyncMessage({ text: 'Username atau Password Salah.', type: 'error' });
                 }
@@ -287,7 +287,7 @@
                     formData.append('packageId', editModal.packageId);
                     formData.append('olshopName', editModal.olshopName);
                     formData.append('status', editModal.status);
-                    formData.append('metodeBayar', editModal.metodeBayar); // Jika '', akan dikirim kosong
+                    formData.append('metodeBayar', editModal.metodeBayar); 
                     formData.append('hargaPaket', editModal.hargaPaket);
                     formData.append('ongkirKode', editModal.ongkirKode); 
                     formData.append('tambahanOngkir', editModal.tambahanOngkir);
@@ -446,9 +446,9 @@
 
             if (!isMasterLoggedIn) {
                 return (
-                    <div className="min-h-screen flex items-center justify-center bg-[#0f172a] p-4 relative overflow-hidden">
-                        <div className="absolute top-0 left-0 w-full h-1/2 bg-gradient-to-b from-[#1e293b] to-[#0f172a]"></div>
-                        <div className="bg-[#1e293b] p-8 rounded-3xl shadow-2xl w-full max-w-sm text-center relative z-10 border border-slate-700 mt-8">
+                    <div className="min-h-screen flex items-center justify-center bg-app-dark p-4 relative overflow-hidden">
+                        <div className="absolute top-0 left-0 w-full h-1/2 bg-gradient-to-b from-[#1e293b] to-app-dark"></div>
+                        <div className="bg-panel-dark p-8 rounded-3xl shadow-2xl w-full max-w-sm text-center relative z-10 border border-panel mt-8">
                             <div className="w-20 h-20 bg-slate-800 rounded-2xl flex items-center justify-center mx-auto mb-4 text-emerald-500 shadow-inner border border-slate-700">
                                 <i className="fas fa-crown text-4xl"></i>
                             </div>
@@ -478,112 +478,199 @@
                 );
             }
 
-            return (
-                <div className="h-screen bg-[#0f172a] font-sans w-full mx-auto shadow-2xl relative flex flex-col">
-                    <header className="bg-[#1e293b] px-4 py-3 md:py-4 shadow-md z-10 sticky top-0 flex justify-between items-center border-b border-slate-700 shrink-0">
-                        <div className="flex items-center">
-                            <div className="w-8 h-8 md:w-10 md:h-10 bg-emerald-600 rounded-lg flex items-center justify-center mr-3 text-white shadow-sm">
-                                <i className="fas fa-crown text-sm md:text-base"></i>
-                            </div>
-                            <div>
-                                <p className="text-[9px] md:text-[10px] text-emerald-400 font-bold uppercase tracking-widest mb-0.5">EXCEED EXPRESS</p>
-                                <h1 className="text-sm md:text-lg lg:text-xl font-black text-white leading-none truncate">MASTER DASHBOARD</h1>
-                            </div>
+            //            
+            // Header component shared between modes
+            const DashboardHeader = () => (
+                <header className="bg-[#151928] px-4 py-3 shadow-md z-20 sticky top-0 flex justify-between items-center border-b border-[#2a3042] shrink-0">
+                    <div className="flex items-center">
+                        <div className="w-10 h-10 bg-emerald-500 rounded-lg flex items-center justify-center mr-3 text-white shadow-sm">
+                            <i className="fas fa-crown text-xl"></i>
                         </div>
-                        <button onClick={handleLogout} className="text-[10px] md:text-xs font-bold text-slate-300 hover:text-white bg-slate-800 hover:bg-red-500 border border-slate-600 px-3 py-1.5 rounded-lg transition-colors flex items-center shadow-sm">
-                            <span className="hidden md:inline mr-2">Tutup Sesi</span> <i className="fas fa-power-off"></i>
-                        </button>
-                    </header>
-
-                    <div className="flex-1 overflow-y-auto p-3 md:p-5 lg:p-6 space-y-4 md:space-y-6 pb-10 max-w-7xl mx-auto w-full custom-scrollbar">
+                        <div>
+                            <p className="text-[10px] text-emerald-400 font-bold uppercase tracking-widest leading-none">EXCEED EXPRESS</p>
+                            <h1 className="text-base md:text-lg font-black text-white leading-tight">MASTER DASHBOARD</h1>
+                        </div>
+                    </div>
+                    <div className="flex items-center space-x-3">
+                        {/* Layout Toggle Switch */}
+                        <div className="flex items-center bg-[#1e2533] rounded-full p-1 border border-[#2a3042]">
+                            <button 
+                                onClick={() => setLayoutMode('android')} 
+                                className={`px-2 md:px-3 py-1 rounded-full text-[10px] md:text-xs font-bold transition-colors flex items-center ${layoutMode === 'android' ? 'bg-slate-700 text-white shadow' : 'text-slate-400 hover:text-slate-300'}`}
+                                title="Mode Android"
+                            >
+                                <i className="fas fa-mobile-alt md:mr-1"></i><span className="hidden md:inline">Android</span>
+                            </button>
+                            <button 
+                                onClick={() => setLayoutMode('web')} 
+                                className={`px-2 md:px-3 py-1 rounded-full text-[10px] md:text-xs font-bold transition-colors flex items-center ${layoutMode === 'web' ? 'bg-slate-700 text-white shadow' : 'text-slate-400 hover:text-slate-300'}`}
+                                title="Mode Web"
+                            >
+                                <i className="fas fa-desktop md:mr-1"></i><span className="hidden md:inline">Web</span>
+                            </button>
+                        </div>
                         
-                        <div className="bg-[#1e293b] p-3 md:p-4 rounded-xl shadow-sm border border-slate-700 flex flex-col space-y-3">
-                            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 w-full">
-                                <div className="relative w-full md:max-w-sm">
-                                    <i className="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 text-xs"></i>
-                                    <input type="text" placeholder="Cari Resi, Customer, Olshop, Kurir..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full pl-8 pr-3 py-2.5 bg-slate-800 border border-slate-600 rounded-lg text-[10px] md:text-xs outline-none focus:border-emerald-500 text-slate-200 placeholder-slate-500 transition-colors" />
-                                </div>
-                                
-                                <div className="flex flex-col md:flex-row items-center gap-2 w-full md:w-auto">
-                                    <div className="relative w-full md:w-36">
-                                        <i className="fas fa-calendar absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 text-[10px] md:text-xs"></i>
-                                        <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="w-full pl-8 pr-2 py-2 bg-slate-800 border border-slate-600 rounded-lg text-[10px] md:text-xs outline-none focus:border-emerald-500 text-slate-200" />
-                                    </div>
-                                    <span className="hidden md:block text-[10px] font-bold text-slate-500">Hingga</span>
-                                    <div className="relative w-full md:w-36">
-                                        <i className="fas fa-calendar absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 text-[10px] md:text-xs"></i>
-                                        <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="w-full pl-8 pr-2 py-2 bg-slate-800 border border-slate-600 rounded-lg text-[10px] md:text-xs outline-none focus:border-emerald-500 text-slate-200" />
-                                    </div>
-                                    {(startDate || endDate) && (<button onClick={() => { setStartDate(''); setEndDate(''); }} className="p-2 bg-slate-700 text-red-400 rounded-lg hover:bg-slate-600 w-full md:w-auto flex justify-center items-center"><i className="fas fa-times-circle"></i></button>)}
-                                    <button onClick={() => syncData()} disabled={isLoadingSync} className={`w-full md:w-auto flex items-center justify-center bg-emerald-600 hover:bg-emerald-500 px-4 py-2 rounded-lg transition-all ml-1 ${isLoadingSync ? 'opacity-50 cursor-not-allowed' : ''}`}>
-                                        <i className={`fas fa-sync-alt text-white mr-2 text-[10px] md:text-xs ${isLoadingSync ? 'animate-spin' : ''}`}></i>
-                                        <span className="text-white text-[10px] md:text-xs font-bold">{isLoadingSync ? 'Memuat...' : 'Refresh'}</span>
-                                    </button>
-                                </div>
-                            </div>
-                            
-                            <div className="flex items-center space-x-2 overflow-x-auto pb-1 scrollbar-hide w-full border-t border-slate-700/50 pt-3">
-                                <span className="text-slate-400 text-[10px] md:text-xs font-bold flex items-center mr-2 flex-shrink-0"><i className="fas fa-filter mr-1.5"></i> Status:</span>
-                                {[{id:'semua', label:'Semua'}, {id:'sukses', label:'Sukses'}, {id:'proses', label:'Proses'}, {id:'pending', label:'Pending'}, {id:'cancel', label:'Cancel'}].map(f => (
-                                    <button key={f.id} onClick={() => setGlobalStatusFilter(f.id)} className={`px-3 py-1.5 rounded-lg text-[10px] md:text-xs font-bold uppercase transition-colors whitespace-nowrap border ${globalStatusFilter === f.id ? 'bg-emerald-600 text-white border-emerald-500' : 'bg-slate-800 text-slate-400 border-slate-600 hover:bg-slate-700 hover:text-slate-200'}`}>
-                                        {f.label}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
+                        <button onClick={handleLogout} className="w-9 h-9 rounded-full bg-[#3a2028] text-[#f03e3e] border border-[#5c2b33] flex items-center justify-center hover:bg-red-500 hover:text-white transition-colors shadow-sm">
+                            <i className="fas fa-power-off"></i>
+                        </button>
+                    </div>
+                </header>
+            );
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
-                            <div className="bg-gradient-to-br from-blue-600 to-blue-800 rounded-xl p-4 md:p-5 text-white shadow-md relative overflow-hidden">
-                                <div className="absolute -right-2 -bottom-4 opacity-20"><i className="fas fa-motorcycle text-[80px]"></i></div>
-                                <p className="text-blue-100 text-[10px] md:text-xs font-bold uppercase tracking-widest mb-1">TOTAL UANG DI KURIR</p>
-                                <h2 className="text-2xl md:text-3xl font-black mb-2">{formatCurrency(globalSummary.totalSetoranKurir)}</h2>
-                                <p className="text-[9px] md:text-[10px] text-blue-100 flex items-center bg-black/20 w-fit px-2 py-1 rounded-md"><i className="fas fa-hand-holding-usd mr-1.5"></i> Tunai yang wajib disetor kurir</p>
-                            </div>
-                            <div className="bg-gradient-to-br from-[#e65c00] to-red-800 rounded-xl p-4 md:p-5 text-white shadow-md relative overflow-hidden">
-                                <div className="absolute -right-2 -bottom-4 opacity-20"><i className="fas fa-store text-[80px]"></i></div>
-                                <p className="text-orange-100 text-[10px] md:text-xs font-bold uppercase tracking-widest mb-1">DANA OLSHOP (BELUM CAIR)</p>
-                                <h2 className="text-2xl md:text-3xl font-black mb-2">{formatCurrency(globalSummary.totalDanaBelumCair)}</h2>
-                                <p className="text-[9px] md:text-[10px] text-emerald-100 flex items-center bg-black/20 w-fit px-2 py-1 rounded-md"><i className="fas fa-check-double text-emerald-400 mr-1.5"></i> Sudah Dicairkan: {formatCurrency(globalSummary.totalDanaCair)}</p>
-                            </div>
+            // Filter Section (Styled like image for Android, used in both)
+            const FilterSection = () => (
+                <div className="bg-[#1e2533] border border-[#2a3042] rounded-xl p-3 md:p-4 flex flex-col space-y-3">
+                    {/* Search */}
+                    <div className="relative w-full">
+                        <i className="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 text-xs"></i>
+                        <input type="text" placeholder="Cari Resi, Customer, Olshop, Kurir..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full pl-9 pr-3 py-2.5 bg-[#151928] border border-[#2a3042] rounded-lg text-xs outline-none focus:border-emerald-500 text-slate-200 placeholder-slate-500 transition-colors" />
+                    </div>
+                    
+                    {/* Dates */}
+                    <div className="flex items-center space-x-2 w-full">
+                        <div className="relative flex-1">
+                            <i className="fas fa-calendar absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 text-xs"></i>
+                            <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="w-full pl-9 pr-2 py-2 bg-[#151928] border border-[#2a3042] rounded-lg text-xs outline-none focus:border-emerald-500 text-slate-200" />
                         </div>
-
-                        <div className="flex border-b border-slate-700 space-x-2 md:space-x-6 overflow-x-auto scrollbar-hide shrink-0">
-                            <button onClick={() => setActiveTab('gaji')} className={`shrink-0 pb-3 text-xs md:text-sm font-bold transition-colors ${activeTab === 'gaji' ? 'text-yellow-500 border-b-2 border-yellow-500' : 'text-slate-400 hover:text-slate-300'}`}>
-                                <i className="fas fa-bullseye mr-1.5"></i> Gaji & Target Ops
-                            </button>
-                            <button onClick={() => setActiveTab('profit')} className={`shrink-0 pb-3 text-xs md:text-sm font-bold transition-colors ${activeTab === 'profit' ? 'text-emerald-500 border-b-2 border-emerald-500' : 'text-slate-400 hover:text-slate-300'}`}>
-                                <i className="fas fa-chart-line mr-1.5"></i> Laporan Profit
-                            </button>
-                            <button onClick={() => setActiveTab('olshop')} className={`shrink-0 pb-3 text-xs md:text-sm font-bold transition-colors ${activeTab === 'olshop' ? 'text-[#e65c00] border-b-2 border-[#e65c00]' : 'text-slate-400 hover:text-slate-300'}`}>
-                                <i className="fas fa-store mr-1.5"></i> Laporan Olshop
-                            </button>
-                            <button onClick={() => setActiveTab('kurir')} className={`shrink-0 pb-3 text-xs md:text-sm font-bold transition-colors ${activeTab === 'kurir' ? 'text-blue-500 border-b-2 border-blue-500' : 'text-slate-400 hover:text-slate-300'}`}>
-                                <i className="fas fa-motorcycle mr-1.5"></i> Laporan Kurir
-                            </button>
+                        <span className="text-[10px] md:text-xs font-bold text-slate-400">s/d</span>
+                        <div className="relative flex-1">
+                            <i className="fas fa-calendar absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 text-xs"></i>
+                            <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="w-full pl-9 pr-2 py-2 bg-[#151928] border border-[#2a3042] rounded-lg text-xs outline-none focus:border-emerald-500 text-slate-200" />
                         </div>
+                        {(startDate || endDate) && (<button onClick={() => { setStartDate(''); setEndDate(''); }} className="px-3 py-2 bg-[#2a3042] text-red-400 rounded-lg hover:bg-slate-600 flex justify-center items-center"><i className="fas fa-times-circle"></i></button>)}
+                    </div>
+                    
+                    {/* Status Filters */}
+                    <div className="flex items-center space-x-2 overflow-x-auto pb-1 scrollbar-hide w-full pt-1">
+                        <span className="text-slate-400 text-[10px] md:text-xs font-bold flex items-center mr-1 flex-shrink-0"><i className="fas fa-filter mr-1.5"></i> Status:</span>
+                        {[{id:'semua', label:'SEMUA'}, {id:'sukses', label:'SUKSES'}, {id:'proses', label:'PROSES'}, {id:'pending', label:'PENDING'}, {id:'cancel', label:'CANCEL'}].map(f => (
+                            <button key={f.id} onClick={() => setGlobalStatusFilter(f.id)} className={`px-3 py-1.5 rounded text-[9px] md:text-[10px] font-bold uppercase transition-colors whitespace-nowrap ${globalStatusFilter === f.id ? 'bg-[#10b981] text-white border border-[#10b981]' : 'bg-transparent text-slate-400 border border-[#2a3042] hover:bg-[#2a3042]'}`}>
+                                {f.label}
+                            </button>
+                        ))}
+                    </div>
 
-                        {}
+                    {/* Refresh/Load Button */}
+                    <button onClick={() => syncData()} disabled={isLoadingSync} className={`w-full flex items-center justify-center bg-[#1e7e59] hover:bg-emerald-600 py-2.5 rounded-lg transition-all mt-1 ${isLoadingSync ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                        <i className={`fas fa-sync-alt text-white mr-2 text-xs ${isLoadingSync ? 'animate-spin' : ''}`}></i>
+                        <span className="text-white text-[10px] md:text-xs font-bold tracking-wider">{isLoadingSync ? 'MEMUAT...' : 'MEMUAT...'}</span>
+                    </button>
+                </div>
+            );
+
+            // Metric Cards (Styled like image)
+            const MetricCards = () => (
+                <div className={`grid grid-cols-1 ${layoutMode==='web' ? 'md:grid-cols-2' : ''} gap-3 md:gap-4`}>
+                    {/* Total Uang di Kurir */}
+                    <div className="bg-gradient-to-r from-[#2c52d4] to-[#1c389c] rounded-2xl p-4 md:p-5 text-white shadow-lg relative overflow-hidden h-[130px] md:h-[150px] flex flex-col justify-center">
+                        <i className="fas fa-motorcycle card-bg-icon"></i>
+                        <p className="text-blue-100 text-[10px] md:text-xs font-bold uppercase tracking-widest mb-1 z-10">TOTAL UANG DI KURIR</p>
+                        <h2 className="text-3xl md:text-4xl font-black mb-2 z-10 drop-shadow-md">{formatCurrency(globalSummary.totalSetoranKurir)}</h2>
+                        <div className="z-10">
+                            <span className="text-[9px] md:text-[10px] text-white/90 bg-white/20 border border-white/30 px-2 py-1 rounded-md font-medium shadow-sm flex inline-flex items-center">
+                                <i className="fas fa-hand-holding-usd mr-1.5"></i> Tunai wajib setor
+                            </span>
+                        </div>
+                    </div>
+                    {/* Dana Olshop */}
+                    <div className="bg-gradient-to-r from-[#d9531e] to-[#a63a10] rounded-2xl p-4 md:p-5 text-white shadow-lg relative overflow-hidden h-[130px] md:h-[150px] flex flex-col justify-center">
+                        <i className="fas fa-store card-bg-icon text-orange-200"></i>
+                        <p className="text-orange-100 text-[10px] md:text-xs font-bold uppercase tracking-widest mb-1 z-10">DANA OLSHOP (BLM CAIR)</p>
+                        <h2 className="text-3xl md:text-4xl font-black mb-2 z-10 drop-shadow-md">{formatCurrency(globalSummary.totalDanaBelumCair)}</h2>
+                        <div className="z-10">
+                            <span className="text-[9px] md:text-[10px] text-white/90 bg-[#7a2505]/60 border border-[#9c340b] px-2 py-1 rounded-md font-medium shadow-sm flex inline-flex items-center">
+                                <i className="fas fa-check text-emerald-400 mr-1.5"></i> Telah Cair: {formatCurrency(globalSummary.totalDanaCair)}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            );
+
+            // Menu Laporan Grid (Android Mode style)
+            const MenuGrid = () => (
+                <div className="mt-4">
+                    <h3 className="text-white font-black text-sm mb-3">Menu Laporan</h3>
+                    <div className="grid grid-cols-4 gap-2 md:gap-4">
+                        <button onClick={() => setActiveTab('olshop')} className={`flex flex-col items-center justify-center p-3 md:p-4 rounded-xl border border-[#2a3042] transition-colors ${activeTab === 'olshop' ? 'bg-[#2a3042] ring-1 ring-[#d9531e]' : 'bg-[#1e2533] hover:bg-[#252d3d]'}`}>
+                            <div className="w-10 h-10 md:w-12 md:h-12 bg-[#8c3716] rounded-lg flex items-center justify-center text-[#ff8d5c] mb-2 shadow-inner">
+                                <i className="fas fa-store text-lg md:text-xl"></i>
+                            </div>
+                            <span className="text-[9px] md:text-[10px] font-bold text-white uppercase tracking-wider">OLSHOP</span>
+                        </button>
+                        <button onClick={() => setActiveTab('kurir')} className={`flex flex-col items-center justify-center p-3 md:p-4 rounded-xl border border-[#2a3042] transition-colors ${activeTab === 'kurir' ? 'bg-[#2a3042] ring-1 ring-[#3b82f6]' : 'bg-[#1e2533] hover:bg-[#252d3d]'}`}>
+                            <div className="w-10 h-10 md:w-12 md:h-12 bg-[#1e3a8a] rounded-lg flex items-center justify-center text-[#60a5fa] mb-2 shadow-inner">
+                                <i className="fas fa-motorcycle text-lg md:text-xl"></i>
+                            </div>
+                            <span className="text-[9px] md:text-[10px] font-bold text-white uppercase tracking-wider">KURIR</span>
+                        </button>
+                        <button onClick={() => setActiveTab('profit')} className={`flex flex-col items-center justify-center p-3 md:p-4 rounded-xl border border-[#2a3042] transition-colors ${activeTab === 'profit' ? 'bg-[#2a3042] ring-1 ring-[#10b981]' : 'bg-[#1e2533] hover:bg-[#252d3d]'}`}>
+                            <div className="w-10 h-10 md:w-12 md:h-12 bg-[#064e3b] rounded-lg flex items-center justify-center text-[#34d399] mb-2 shadow-inner">
+                                <i className="fas fa-chart-line text-lg md:text-xl"></i>
+                            </div>
+                            <span className="text-[9px] md:text-[10px] font-bold text-white uppercase tracking-wider">PROFIT</span>
+                        </button>
+                        <button onClick={() => setActiveTab('gaji')} className={`flex flex-col items-center justify-center p-3 md:p-4 rounded-xl border border-[#2a3042] transition-colors ${activeTab === 'gaji' ? 'bg-[#2a3042] ring-1 ring-[#eab308]' : 'bg-[#1e2533] hover:bg-[#252d3d]'}`}>
+                            <div className="w-10 h-10 md:w-12 md:h-12 bg-[#713f12] rounded-lg flex items-center justify-center text-[#facc15] mb-2 shadow-inner">
+                                <i className="fas fa-bullseye text-lg md:text-xl"></i>
+                            </div>
+                            <span className="text-[9px] md:text-[10px] font-bold text-white uppercase tracking-wider text-center leading-tight">GAJI OPS</span>
+                        </button>
+                    </div>
+                </div>
+            );
+
+            // Web Mode Sidebar Navigation
+            const WebSidebar = () => (
+                <div className="w-64 bg-[#1e2533] border-r border-[#2a3042] p-4 flex flex-col space-y-2 shrink-0 overflow-y-auto">
+                    <h3 className="text-slate-500 font-bold text-[10px] uppercase tracking-widest mb-2 pl-2">Menu Laporan</h3>
+                    
+                    <button onClick={() => setActiveTab('olshop')} className={`flex items-center px-4 py-3 rounded-xl transition-all ${activeTab === 'olshop' ? 'bg-[#d9531e]/10 border border-[#d9531e]/30 text-[#d9531e]' : 'text-slate-400 hover:bg-[#2a3042] hover:text-slate-200'}`}>
+                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center mr-3 ${activeTab === 'olshop' ? 'bg-[#d9531e] text-white' : 'bg-[#2a3042]'}`}><i className="fas fa-store"></i></div>
+                        <span className="font-bold text-sm">Laporan Olshop</span>
+                    </button>
+                    
+                    <button onClick={() => setActiveTab('kurir')} className={`flex items-center px-4 py-3 rounded-xl transition-all ${activeTab === 'kurir' ? 'bg-[#3b82f6]/10 border border-[#3b82f6]/30 text-[#3b82f6]' : 'text-slate-400 hover:bg-[#2a3042] hover:text-slate-200'}`}>
+                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center mr-3 ${activeTab === 'kurir' ? 'bg-[#3b82f6] text-white' : 'bg-[#2a3042]'}`}><i className="fas fa-motorcycle"></i></div>
+                        <span className="font-bold text-sm">Laporan Kurir</span>
+                    </button>
+                    
+                    <button onClick={() => setActiveTab('profit')} className={`flex items-center px-4 py-3 rounded-xl transition-all ${activeTab === 'profit' ? 'bg-[#10b981]/10 border border-[#10b981]/30 text-[#10b981]' : 'text-slate-400 hover:bg-[#2a3042] hover:text-slate-200'}`}>
+                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center mr-3 ${activeTab === 'profit' ? 'bg-[#10b981] text-white' : 'bg-[#2a3042]'}`}><i className="fas fa-chart-line"></i></div>
+                        <span className="font-bold text-sm">Laporan Profit</span>
+                    </button>
+                    
+                    <button onClick={() => setActiveTab('gaji')} className={`flex items-center px-4 py-3 rounded-xl transition-all ${activeTab === 'gaji' ? 'bg-[#eab308]/10 border border-[#eab308]/30 text-[#eab308]' : 'text-slate-400 hover:bg-[#2a3042] hover:text-slate-200'}`}>
+                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center mr-3 ${activeTab === 'gaji' ? 'bg-[#eab308] text-white' : 'bg-[#2a3042]'}`}><i className="fas fa-bullseye"></i></div>
+                        <span className="font-bold text-sm">Gaji & Target Ops</span>
+                    </button>
+                </div>
+            );
+
+            const renderContent = () => {
+                return (
+                    <div className="animate-fade-in-down mt-2 md:mt-4 pb-10">
+                        {/* VIEW GAJI & OPS */}
                         {activeTab === 'gaji' && (
-                            <div className="animate-fade-in-down flex flex-col gap-4">
+                            <div className="flex flex-col gap-4">
                                 <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 md:gap-4">
-                                    <div className="bg-slate-800 p-4 rounded-xl border border-slate-700 shadow-sm col-span-2 lg:col-span-1">
+                                    <div className="bg-[#1e2533] p-4 rounded-xl border border-[#2a3042] shadow-sm col-span-2 lg:col-span-1">
                                         <p className="text-[10px] text-slate-400 font-bold tracking-widest uppercase mb-1">Target Keseluruhan</p>
                                         <h3 className="text-xl md:text-2xl font-black text-white">{formatCurrency(targetPerusahaanGlobal)}</h3>
                                         <p className="text-[9px] text-slate-500 mt-1">Gaji Pokok + Biaya Ops</p>
                                     </div>
-                                    <div className="bg-slate-800 p-4 rounded-xl border border-slate-700 shadow-sm col-span-2 lg:col-span-1">
+                                    <div className="bg-[#1e2533] p-4 rounded-xl border border-[#2a3042] shadow-sm col-span-2 lg:col-span-1">
                                         <p className="text-[10px] text-emerald-500/70 font-bold tracking-widest uppercase mb-1">Total Pencapaian</p>
                                         <h3 className="text-xl md:text-2xl font-black text-emerald-400">{formatCurrency(globalSummary.totalProfitPerusahaan)}</h3>
                                         <p className="text-[9px] text-emerald-500/50 mt-1">Murni dari Ongkir Dasar</p>
                                     </div>
-                                    <div className="bg-slate-800 p-4 rounded-xl border border-slate-700 shadow-sm col-span-2 lg:col-span-1 flex flex-col justify-center">
+                                    <div className="bg-[#1e2533] p-4 rounded-xl border border-[#2a3042] shadow-sm col-span-2 lg:col-span-1 flex flex-col justify-center">
                                         <p className="text-[10px] text-blue-400/80 font-bold tracking-widest uppercase mb-1">Rata-Rata Ongkir</p>
                                         <div className="flex items-end gap-2 md:gap-3">
                                             <h3 className="text-xl md:text-2xl font-black text-blue-400">{formatCurrency(rataRataOngkirGlobal)}</h3>
                                             <span className="text-[9px] text-blue-500/70 font-bold mb-1">/ Pkt</span>
                                         </div>
                                     </div>
-                                    <div className="bg-slate-800 p-4 rounded-xl border border-slate-700 shadow-sm col-span-1 flex flex-col justify-center">
+                                    <div className="bg-[#1e2533] p-4 rounded-xl border border-[#2a3042] shadow-sm col-span-1 flex flex-col justify-center">
                                         <div className="flex justify-between items-center mb-1">
                                             <p className="text-[10px] text-orange-400/80 font-bold tracking-widest uppercase">Target Pkt /Bulan</p>
                                         </div>
@@ -592,10 +679,10 @@
                                             <span className="text-[9px] text-orange-500/70 font-bold mb-1">Paket</span>
                                         </div>
                                     </div>
-                                    <div className="bg-slate-800 p-4 rounded-xl border border-slate-700 shadow-sm col-span-1 flex flex-col justify-center relative">
+                                    <div className="bg-[#1e2533] p-4 rounded-xl border border-[#2a3042] shadow-sm col-span-1 flex flex-col justify-center relative">
                                         <div className="flex justify-between items-center mb-1">
                                             <p className="text-[10px] text-purple-400/80 font-bold tracking-widest uppercase">Target Pkt /Hari</p>
-                                            <div className="flex items-center bg-slate-900 border border-slate-600 rounded px-1.5">
+                                            <div className="flex items-center bg-[#0b1120] border border-[#2a3042] rounded px-1.5">
                                                 <input 
                                                     type="number" 
                                                     value={workDays} 
@@ -613,13 +700,14 @@
                                     </div>
                                 </div>
 
-                                <div className="bg-[#1e293b] rounded-xl shadow-sm border border-slate-700 overflow-hidden">
-                                    <div className="p-4 border-b border-slate-700 bg-slate-800/50 flex justify-between items-center">
+                                {/* Dynamic Ops Costs */}
+                                <div className="bg-[#1e2533] rounded-xl shadow-sm border border-[#2a3042] overflow-hidden">
+                                    <div className="p-4 border-b border-[#2a3042] bg-[#151928] flex justify-between items-center">
                                         <div>
                                             <h3 className="font-bold text-slate-200 text-sm flex items-center">
                                                 <i className="fas fa-calculator text-yellow-500 mr-2"></i> Pengaturan Biaya Operasional (Dinamis)
                                             </h3>
-                                            <p className="text-[10px] text-slate-400 mt-1">Beban operasional akan dibagi <b>merata</b> ke {jumlahKurirAktif} kurir aktif.</p>
+                                            <p className="text-[10px] text-slate-400 mt-1">Beban operasional dibagi <b>merata</b> ke {jumlahKurirAktif} kurir aktif.</p>
                                         </div>
                                         <div className="text-right">
                                             <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block mb-0.5">Total Operasional</span>
@@ -629,38 +717,39 @@
                                     <div className="p-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
                                         <div className="flex flex-col">
                                             <label className="text-[10px] font-bold text-slate-400 uppercase mb-1.5 ml-1"><i className="fas fa-home mr-1"></i> Sewa Kos</label>
-                                            <input type="number" min="0" value={opsCosts.sewaKos} onChange={(e) => handleOpsChange('sewaKos', e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white font-bold outline-none focus:border-yellow-500 focus:ring-1 focus:ring-yellow-500/50" />
+                                            <input type="number" min="0" value={opsCosts.sewaKos} onChange={(e) => handleOpsChange('sewaKos', e.target.value)} className="w-full bg-[#0b1120] border border-[#2a3042] rounded-lg px-3 py-2 text-sm text-white font-bold outline-none focus:border-yellow-500 focus:ring-1 focus:ring-yellow-500/50" />
                                         </div>
                                         <div className="flex flex-col">
                                             <label className="text-[10px] font-bold text-slate-400 uppercase mb-1.5 ml-1"><i className="fas fa-bolt mr-1"></i> Listrik</label>
-                                            <input type="number" min="0" value={opsCosts.biayaListrik} onChange={(e) => handleOpsChange('biayaListrik', e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white font-bold outline-none focus:border-yellow-500 focus:ring-1 focus:ring-yellow-500/50" />
+                                            <input type="number" min="0" value={opsCosts.biayaListrik} onChange={(e) => handleOpsChange('biayaListrik', e.target.value)} className="w-full bg-[#0b1120] border border-[#2a3042] rounded-lg px-3 py-2 text-sm text-white font-bold outline-none focus:border-yellow-500 focus:ring-1 focus:ring-yellow-500/50" />
                                         </div>
                                         <div className="flex flex-col">
-                                            <label className="text-[10px] font-bold text-slate-400 uppercase mb-1.5 ml-1"><i className="fas fa-wifi mr-1"></i> Internet Wifi</label>
-                                            <input type="number" min="0" value={opsCosts.biayaWifi} onChange={(e) => handleOpsChange('biayaWifi', e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white font-bold outline-none focus:border-yellow-500 focus:ring-1 focus:ring-yellow-500/50" />
+                                            <label className="text-[10px] font-bold text-slate-400 uppercase mb-1.5 ml-1"><i className="fas fa-wifi mr-1"></i> Internet</label>
+                                            <input type="number" min="0" value={opsCosts.biayaWifi} onChange={(e) => handleOpsChange('biayaWifi', e.target.value)} className="w-full bg-[#0b1120] border border-[#2a3042] rounded-lg px-3 py-2 text-sm text-white font-bold outline-none focus:border-yellow-500 focus:ring-1 focus:ring-yellow-500/50" />
                                         </div>
                                         <div className="flex flex-col">
                                             <label className="text-[10px] font-bold text-slate-400 uppercase mb-1.5 ml-1"><i className="fas fa-gas-pump mr-1"></i> Akomodasi</label>
-                                            <input type="number" min="0" value={opsCosts.akomodasi} onChange={(e) => handleOpsChange('akomodasi', e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white font-bold outline-none focus:border-yellow-500 focus:ring-1 focus:ring-yellow-500/50" />
+                                            <input type="number" min="0" value={opsCosts.akomodasi} onChange={(e) => handleOpsChange('akomodasi', e.target.value)} className="w-full bg-[#0b1120] border border-[#2a3042] rounded-lg px-3 py-2 text-sm text-white font-bold outline-none focus:border-yellow-500 focus:ring-1 focus:ring-yellow-500/50" />
                                         </div>
                                         <div className="flex flex-col">
                                             <label className="text-[10px] font-bold text-slate-400 uppercase mb-1.5 ml-1"><i className="fas fa-user-tie mr-1"></i> Gaji Admin</label>
-                                            <input type="number" min="0" value={opsCosts.gajiAdmin} onChange={(e) => handleOpsChange('gajiAdmin', e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white font-bold outline-none focus:border-yellow-500 focus:ring-1 focus:ring-yellow-500/50" />
+                                            <input type="number" min="0" value={opsCosts.gajiAdmin} onChange={(e) => handleOpsChange('gajiAdmin', e.target.value)} className="w-full bg-[#0b1120] border border-[#2a3042] rounded-lg px-3 py-2 text-sm text-white font-bold outline-none focus:border-yellow-500 focus:ring-1 focus:ring-yellow-500/50" />
                                         </div>
                                         <div className="flex flex-col">
                                             <label className="text-[10px] font-bold text-slate-400 uppercase mb-1.5 ml-1"><i className="fas fa-ellipsis-h mr-1"></i> Lain-lain</label>
-                                            <input type="number" min="0" value={opsCosts.lainLain} onChange={(e) => handleOpsChange('lainLain', e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white font-bold outline-none focus:border-yellow-500 focus:ring-1 focus:ring-yellow-500/50" />
+                                            <input type="number" min="0" value={opsCosts.lainLain} onChange={(e) => handleOpsChange('lainLain', e.target.value)} className="w-full bg-[#0b1120] border border-[#2a3042] rounded-lg px-3 py-2 text-sm text-white font-bold outline-none focus:border-yellow-500 focus:ring-1 focus:ring-yellow-500/50" />
                                         </div>
                                     </div>
                                 </div>
 
-                                <div className="bg-[#1e293b] rounded-xl shadow-sm border border-slate-700 overflow-hidden">
+                                {/* Kurir Target Tracking */}
+                                <div className="bg-[#1e2533] rounded-xl shadow-sm border border-[#2a3042] overflow-hidden">
                                     <div className="overflow-x-auto custom-scrollbar">
                                         <div className="min-w-[1050px] flex flex-col">
                                             {kurirReport.length === 0 ? (
-                                                <div className="p-8 text-center text-slate-500">Tidak ada data kurir di periode ini.</div>
+                                                <div className="p-8 text-center text-slate-500">Tidak ada data kurir.</div>
                                             ) : (
-                                                <div className="grid grid-cols-[200px_1fr_1fr_130px_130px_120px_120px] gap-4 px-4 py-3 text-[10px] text-slate-400 font-bold uppercase tracking-widest bg-[#151928] border-b border-slate-700 items-center">
+                                                <div className="grid grid-cols-[200px_1fr_1fr_130px_130px_120px_120px] gap-4 px-4 py-3 text-[10px] text-slate-400 font-bold uppercase tracking-widest bg-[#151928] border-b border-[#2a3042] items-center">
                                                     <div>NAMA KURIR</div>
                                                     <div>RINCIAN TARGET BEBAN</div>
                                                     <div>PENCAPAIAN PROGRESS</div>
@@ -687,44 +776,39 @@
                                                 const progressPct = targetFinal > 0 ? Math.min((pencapaian / targetFinal) * 100, 100).toFixed(1) : 0;
 
                                                 return (
-                                                    <div key={idx} className="grid grid-cols-[200px_1fr_1fr_130px_130px_120px_120px] gap-4 px-4 py-5 border-b border-slate-700/50 hover:bg-slate-800/30 transition-colors items-center">
+                                                    <div key={idx} className="grid grid-cols-[200px_1fr_1fr_130px_130px_120px_120px] gap-4 px-4 py-5 border-b border-[#2a3042] hover:bg-[#151928] transition-colors items-center">
                                                         
                                                         <div className="flex flex-col">
                                                             <span className="font-bold text-slate-200 uppercase truncate text-sm" title={kur.name}>{kur.name}</span>
                                                             <span className="text-[10px] text-slate-500 mt-0.5">{kur.totalSukses} Pkt Selesai</span>
                                                         </div>
 
-                                                        <div className="flex flex-col gap-1 pr-2 border-r border-slate-700/50">
+                                                        <div className="flex flex-col gap-1 pr-2 border-r border-[#2a3042]">
                                                             {/* Gaji Harian Input */}
                                                             <div className="flex justify-between items-center text-[10px] mb-0.5">
                                                                 <span className="text-slate-500">Gaji Harian</span>
-                                                                <input 
-                                                                    type="number" 
-                                                                    value={ks.gajiHarian} 
-                                                                    onChange={(e) => updateKurirSetting(kur.name, 'gajiHarian', e.target.value)}
-                                                                    className="w-16 md:w-20 bg-slate-900 border border-slate-600 rounded px-1.5 py-0.5 text-right text-slate-200 font-bold outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/50" 
-                                                                />
+                                                                <input type="number" value={ks.gajiHarian} onChange={(e) => updateKurirSetting(kur.name, 'gajiHarian', e.target.value)} className="w-16 md:w-20 bg-[#0b1120] border border-[#2a3042] rounded px-1.5 py-0.5 text-right text-slate-200 font-bold outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/50" />
                                                             </div>
                                                             {/* Tgl Masuk & Akhir */}
                                                             <div className="flex flex-col gap-0.5 text-[9px] mb-1">
                                                                 <div className="flex justify-between items-center">
                                                                     <span className="text-slate-500">Tgl Masuk</span>
-                                                                    <input type="date" value={ks.tglMasuk} onChange={(e) => updateKurirSetting(kur.name, 'tglMasuk', e.target.value)} className="bg-slate-900 border border-slate-600 rounded px-1 py-0.5 text-slate-200 outline-none w-[90px]" />
+                                                                    <input type="date" value={ks.tglMasuk} onChange={(e) => updateKurirSetting(kur.name, 'tglMasuk', e.target.value)} className="bg-[#0b1120] border border-[#2a3042] rounded px-1 py-0.5 text-slate-200 outline-none w-[90px]" />
                                                                 </div>
                                                                 <div className="flex justify-between items-center">
                                                                     <span className="text-slate-500">Tgl Akhir</span>
-                                                                    <input type="date" value={ks.tglAkhir} onChange={(e) => updateKurirSetting(kur.name, 'tglAkhir', e.target.value)} className="bg-slate-900 border border-slate-600 rounded px-1 py-0.5 text-slate-200 outline-none w-[90px]" />
+                                                                    <input type="date" value={ks.tglAkhir} onChange={(e) => updateKurirSetting(kur.name, 'tglAkhir', e.target.value)} className="bg-[#0b1120] border border-[#2a3042] rounded px-1 py-0.5 text-slate-200 outline-none w-[90px]" />
                                                                 </div>
                                                                 <div className="flex justify-between items-center mt-0.5">
                                                                     <span className="text-slate-500">Izin/Libur</span>
                                                                     <div className="flex items-center">
-                                                                        <input type="number" value={ks.hariLibur || ''} onChange={(e) => updateKurirSetting(kur.name, 'hariLibur', e.target.value)} className="bg-slate-900 border border-slate-600 rounded px-1 py-0.5 text-slate-200 outline-none w-[50px] text-right focus:border-yellow-500" placeholder="0" />
+                                                                        <input type="number" value={ks.hariLibur || ''} onChange={(e) => updateKurirSetting(kur.name, 'hariLibur', e.target.value)} className="bg-[#0b1120] border border-[#2a3042] rounded px-1 py-0.5 text-slate-200 outline-none w-[50px] text-right focus:border-yellow-500" placeholder="0" />
                                                                         <span className="text-[9px] text-slate-500 ml-1 w-[36px]">Hari</span>
                                                                     </div>
                                                                 </div>
                                                             </div>
-                                                            {/* Akumulasi Hari & Total Gaji */}
-                                                            <div className="flex justify-between items-center text-[10px] bg-slate-900/50 p-1 rounded mb-1">
+                                                            {/* Akumulasi */}
+                                                            <div className="flex justify-between items-center text-[10px] bg-[#0b1120] p-1 rounded mb-1">
                                                                 <span className="text-slate-400">Kerja: <b className="text-white">{hKerjaBersih} Hari</b></span>
                                                                 <span className="text-emerald-400 font-bold">{formatCurrency(targetGajiFinal)}</span>
                                                             </div>
@@ -733,7 +817,7 @@
                                                                 <span className="text-slate-500">Beban Ops Global</span>
                                                                 <span className="text-orange-400 font-bold">+{formatCurrency(bebanOpsPerKurir)}</span>
                                                             </div>
-                                                            <div className="flex justify-between items-center text-[11px] mt-1 pt-1 border-t border-slate-700">
+                                                            <div className="flex justify-between items-center text-[11px] mt-1 pt-1 border-t border-[#2a3042]">
                                                                 <span className="text-slate-400 font-bold">Total Target</span>
                                                                 <span className="text-white font-black">{formatCurrency(targetFinal)}</span>
                                                             </div>
@@ -744,7 +828,7 @@
                                                                 <span className="text-xs font-black text-emerald-400">{formatCurrency(pencapaian)}</span>
                                                                 <span className="text-[10px] font-bold text-slate-400">{progressPct}%</span>
                                                             </div>
-                                                            <div className="w-full bg-slate-800 rounded-full h-2.5 overflow-hidden border border-slate-700">
+                                                            <div className="w-full bg-[#0b1120] rounded-full h-2.5 overflow-hidden border border-[#2a3042]">
                                                                 <div className={`h-2.5 rounded-full transition-all duration-1000 progress-bar-striped ${isTercapai ? 'bg-emerald-500' : 'bg-yellow-500'}`} style={{ width: `${progressPct}%` }}></div>
                                                             </div>
                                                         </div>
@@ -768,11 +852,11 @@
 
                                                         <div className="text-center">
                                                             {isTercapai ? (
-                                                                <span className="bg-emerald-900/40 text-emerald-400 border border-emerald-500/50 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider shadow-sm flex items-center justify-center">
+                                                                <span className="bg-emerald-900/40 text-emerald-400 border border-emerald-500/50 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider shadow-sm inline-flex items-center justify-center">
                                                                     <i className="fas fa-star mr-1.5"></i> Lulus
                                                                 </span>
                                                             ) : (
-                                                                <span className="bg-slate-800 text-slate-400 border border-slate-600 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider shadow-sm flex items-center justify-center">
+                                                                <span className="bg-[#0b1120] text-slate-400 border border-[#2a3042] px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider shadow-sm inline-flex items-center justify-center">
                                                                     <i className="fas fa-spinner fa-spin mr-1.5 text-yellow-500"></i> Proses
                                                                 </span>
                                                             )}
@@ -786,21 +870,19 @@
                             </div>
                         )}
 
+                        {/* VIEW PROFIT */}
                         {activeTab === 'profit' && (
-                            <div className="bg-[#1e293b] rounded-xl shadow-sm border border-slate-700 overflow-hidden animate-fade-in-down">
-                                <div className="p-3 md:p-4 border-b border-slate-700 bg-slate-800/50 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                            <div className="bg-[#1e2533] rounded-xl shadow-sm border border-[#2a3042] overflow-hidden">
+                                <div className="p-3 md:p-4 border-b border-[#2a3042] bg-[#151928] flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                                     <div>
                                         <h3 className="font-bold text-slate-200 text-xs md:text-sm flex items-center">
                                             <i className="fas fa-chart-line text-emerald-500 mr-2"></i> Profit Murni Perusahaan (Dari Ongkir Dasar)
                                         </h3>
-                                        <p className="text-[10px] text-slate-400 mt-1">Ongkir Tambahan (Volume/Jarak) adalah 100% hak kurir dan dipisah dari profit perusahaan.</p>
+                                        <p className="text-[10px] text-slate-400 mt-1">Ongkir Tambahan (Volume/Jarak) adalah 100% hak kurir.</p>
                                     </div>
-                                    
-                                    <div className="flex gap-3 w-full md:w-auto overflow-x-auto scrollbar-hide pb-1 md:pb-0">
-                                        <div className="bg-slate-900 border border-slate-700 rounded-lg p-3 min-w-[140px] flex flex-col items-end shadow-inner">
-                                            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">Total Profit Bersih</span>
-                                            <span className="text-emerald-400 font-black text-sm md:text-lg">{formatCurrency(globalSummary.totalProfitPerusahaan)}</span>
-                                        </div>
+                                    <div className="bg-[#0b1120] border border-[#2a3042] rounded-lg p-3 min-w-[140px] flex flex-col items-end shadow-inner">
+                                        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">Total Profit Bersih</span>
+                                        <span className="text-emerald-400 font-black text-sm md:text-lg">{formatCurrency(globalSummary.totalProfitPerusahaan)}</span>
                                     </div>
                                 </div>
                                 
@@ -809,7 +891,7 @@
                                         {kurirReport.length === 0 ? (
                                             <div className="p-8 text-center text-slate-500">Tidak ada data profit di periode ini.</div>
                                         ) : (
-                                            <div className="grid grid-cols-[250px_100px_1fr_1fr_1fr_1fr] gap-3 px-4 py-3 text-[10px] text-slate-400 font-bold uppercase tracking-widest bg-[#151928] border-b border-slate-700 items-center">
+                                            <div className="grid grid-cols-[250px_100px_1fr_1fr_1fr_1fr] gap-3 px-4 py-3 text-[10px] text-slate-400 font-bold uppercase tracking-widest bg-[#151928] border-b border-[#2a3042] items-center">
                                                 <div>KURIR PENGANTAR</div>
                                                 <div className="text-center">PKT SUKSES</div>
                                                 <div className="text-right text-emerald-400">ONGKIR DSR (PROFIT)</div>
@@ -822,7 +904,7 @@
                                         {[...kurirReport].sort((a,b) => b.profitPerusahaan - a.profitPerusahaan).map((kur, idx) => {
                                             const avgProfit = kur.totalSukses > 0 ? kur.profitPerusahaan / kur.totalSukses : 0;
                                             return (
-                                                <div key={idx} className="grid grid-cols-[250px_100px_1fr_1fr_1fr_1fr] gap-3 px-4 py-4 border-b border-slate-700/50 hover:bg-slate-800/30 transition-colors items-center">
+                                                <div key={idx} className="grid grid-cols-[250px_100px_1fr_1fr_1fr_1fr] gap-3 px-4 py-4 border-b border-[#2a3042] hover:bg-[#151928] transition-colors items-center">
                                                     <div className="flex items-center gap-3">
                                                         <div className="w-8 h-8 rounded-full bg-emerald-900/30 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
                                                             <i className="fas fa-motorcycle"></i>
@@ -847,10 +929,8 @@
                                                 </div>
                                             );
                                         })}
-
-                                        {/* AKUMULASI LAPORAN PROFIT */}
                                         {kurirReport.length > 0 && (
-                                            <div className="grid grid-cols-[250px_100px_1fr_1fr_1fr_1fr] gap-3 px-4 py-4 border-t-2 border-emerald-600/50 bg-slate-800/80 rounded-b-xl items-center mt-1">
+                                            <div className="grid grid-cols-[250px_100px_1fr_1fr_1fr_1fr] gap-3 px-4 py-4 border-t-2 border-emerald-600/50 bg-[#151928] rounded-b-xl items-center mt-1">
                                                 <div className="font-black text-slate-200 uppercase text-xs md:text-sm">TOTAL KESELURUHAN</div>
                                                 <div className="text-center font-black text-white">{kurirReport.reduce((acc, k) => acc + k.totalSukses, 0)} <span className="text-[9px] text-slate-400">Pkt</span></div>
                                                 <div className="text-right font-black text-emerald-400">{formatCurrency(kurirReport.reduce((acc, k) => acc + k.totalDasarOngkir, 0))}</div>
@@ -864,12 +944,12 @@
                             </div>
                         )}
 
+                        {/* VIEW OLSHOP */}
                         {activeTab === 'olshop' && (
-                            <div className="bg-[#1e293b] rounded-xl shadow-sm border border-slate-700 overflow-hidden animate-fade-in-down">
-                                <div className="p-3 md:p-4 border-b border-slate-700 bg-slate-800/50 flex justify-between items-center">
+                            <div className="bg-[#1e2533] rounded-xl shadow-sm border border-[#2a3042] overflow-hidden">
+                                <div className="p-3 md:p-4 border-b border-[#2a3042] bg-[#151928] flex justify-between items-center">
                                     <h3 className="font-bold text-slate-200 text-xs md:text-sm">Rekapitulasi Pencairan Olshop <span className="text-[10px] text-slate-400 font-normal ml-2">(Klik baris untuk rincian)</span></h3>
                                 </div>
-                                
                                 <div className="overflow-x-auto custom-scrollbar">
                                     <div className="min-w-[1000px] flex flex-col">
                                         {olshopReport.length === 0 ? (
@@ -878,7 +958,6 @@
                                             olshopReport.map((ol, idx) => {
                                                 const isExpanded = expandedOlshops.includes(ol.name);
                                                 const currentFilter = olshopFilters[ol.name] || 'semua';
-                                                
                                                 const displayedPaket = ol.paketTerkait.filter(pkg => {
                                                     if (currentFilter === 'semua') return true;
                                                     let stat = String(pkg.status).toLowerCase().replace(' ', '_');
@@ -887,18 +966,15 @@
                                                 });
                                                 
                                                 return (
-                                                    <div key={idx} className="flex flex-col border-b border-slate-700/50 hover:bg-slate-800/30 transition-colors">
-                                                        <div 
-                                                            className="flex items-center justify-between p-3 md:p-4 cursor-pointer"
-                                                            onClick={() => toggleOlshop(ol.name)}
-                                                        >
+                                                    <div key={idx} className="flex flex-col border-b border-[#2a3042] hover:bg-[#151928] transition-colors">
+                                                        <div className="flex items-center justify-between p-3 md:p-4 cursor-pointer" onClick={() => toggleOlshop(ol.name)}>
                                                             <div className="flex items-center gap-2.5 w-[220px] md:w-[280px] shrink-0">
-                                                                <div className={`w-5 h-5 rounded flex items-center justify-center transition-transform ${isExpanded ? 'bg-[#e65c00] text-white rotate-180' : 'bg-slate-700 text-slate-400'}`}>
+                                                                <div className={`w-5 h-5 rounded flex items-center justify-center transition-transform ${isExpanded ? 'bg-[#d9531e] text-white rotate-180' : 'bg-[#2a3042] text-slate-400'}`}>
                                                                     <i className="fas fa-chevron-down text-[10px]"></i>
                                                                 </div>
-                                                                <i className="fas fa-store text-[#e65c00]"></i>
+                                                                <i className="fas fa-store text-[#d9531e]"></i>
                                                                 <span className="font-bold text-slate-200 uppercase truncate text-xs md:text-sm">{ol.name}</span>
-                                                                <span className="text-[9px] bg-slate-700 text-slate-300 px-2 py-0.5 rounded shrink-0 font-bold">{ol.paketTerkait.length} Pkt</span>
+                                                                <span className="text-[9px] bg-[#2a3042] text-slate-300 px-2 py-0.5 rounded shrink-0 font-bold">{ol.paketTerkait.length} Pkt</span>
                                                             </div>
                                                             
                                                             <div className="flex-1 flex justify-end items-center gap-4 md:gap-6">
@@ -918,33 +994,33 @@
                                                                     <span className="text-[8px] font-bold text-red-500/70 uppercase tracking-widest mb-0.5">POTONGAN TF</span>
                                                                     <span className="text-xs md:text-sm font-black text-red-400">-{formatCurrency(ol.potongan)}</span>
                                                                 </div>
-                                                                <div className="flex flex-col items-end justify-center min-w-[90px] pl-2 border-l border-slate-700">
+                                                                <div className="flex flex-col items-end justify-center min-w-[90px] pl-2 border-l border-[#2a3042]">
                                                                     <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">TOTAL BERSIH</span>
-                                                                    <span className={`text-[13px] md:text-[15px] font-black ${ol.pencairan >= 0 ? 'text-[#e65c00]' : 'text-red-500'}`}>{formatCurrency(ol.pencairan)}</span>
+                                                                    <span className={`text-[13px] md:text-[15px] font-black ${ol.pencairan >= 0 ? 'text-[#d9531e]' : 'text-red-500'}`}>{formatCurrency(ol.pencairan)}</span>
                                                                     {ol.nominalBelumCair !== ol.pencairan && ol.nominalBelumCair !== 0 && (
                                                                         <span className="text-[8px] text-slate-500 mt-0.5">Blm Cair: {formatCurrency(ol.nominalBelumCair)}</span>
                                                                     )}
                                                                 </div>
                                                                 <div className="min-w-[95px] flex justify-end ml-2" onClick={(e) => e.stopPropagation()}>
                                                                     {ol.paketBelumCairIds.length > 0 ? (
-                                                                        <button onClick={() => openCairkanModal(ol)} className="bg-emerald-500 hover:bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-[10px] font-bold shadow-sm w-full transition-colors flex items-center justify-center">
+                                                                        <button onClick={() => openCairkanModal(ol)} className="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 rounded-lg text-[10px] font-bold shadow-sm w-full transition-colors flex items-center justify-center">
                                                                             <i className="fas fa-hand-holding-usd mr-1.5"></i> Cairkan ({ol.paketBelumCairIds.length})
                                                                         </button>
                                                                     ) : (
-                                                                        <button disabled className="bg-slate-700 text-slate-400 px-3 py-1.5 rounded-lg text-[10px] font-bold w-full border border-slate-600">LUNAS</button>
+                                                                        <button disabled className="bg-[#2a3042] text-slate-400 px-3 py-1.5 rounded-lg text-[10px] font-bold w-full border border-[#374151]">LUNAS</button>
                                                                     )}
                                                                 </div>
                                                             </div>
                                                         </div>
 
                                                         {isExpanded && (
-                                                            <div className="p-3 md:p-4 bg-[#0f172a]/60 animate-fade-in-down border-t border-slate-700/50">
+                                                            <div className="p-3 md:p-4 bg-[#0b1120] border-t border-[#2a3042]">
                                                                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-3 gap-3">
                                                                     <h4 className="text-slate-400 font-bold text-[10px] uppercase tracking-widest flex items-center"><i className="fas fa-boxes mr-2"></i>Rincian Resi: {ol.name}</h4>
                                                                     <div className="flex flex-wrap gap-1.5">
                                                                         {[{id:'semua', label:'Semua'}, {id:'sukses', label:'Sukses'}, {id:'proses', label:'Proses'}, {id:'pending', label:'Pending'}, {id:'cancel', label:'Cancel'}].map(f => (
                                                                             <button key={f.id} onClick={(e) => { e.stopPropagation(); setOlshopFilters(prev => ({...prev, [ol.name]: f.id})); }}
-                                                                                className={`px-2.5 py-1 rounded text-[9px] font-bold uppercase transition-colors border ${currentFilter === f.id ? 'bg-[#e65c00] text-white border-[#e65c00]' : 'bg-slate-800 text-slate-400 border-slate-600 hover:bg-slate-700'}`}>
+                                                                                className={`px-2.5 py-1 rounded text-[9px] font-bold uppercase transition-colors border ${currentFilter === f.id ? 'bg-[#d9531e] text-white border-[#d9531e]' : 'bg-[#1e2533] text-slate-400 border-[#2a3042] hover:bg-[#2a3042]'}`}>
                                                                                 {f.label}
                                                                             </button>
                                                                         ))}
@@ -952,11 +1028,11 @@
                                                                 </div>
                                                                 
                                                                 {displayedPaket.length === 0 ? (
-                                                                    <div className="text-center py-4 text-slate-500 text-xs italic">Tidak ada paket dengan filter tersebut.</div>
+                                                                    <div className="text-center py-4 text-slate-500 text-xs italic">Tidak ada paket.</div>
                                                                 ) : (
-                                                                    <div className="overflow-x-auto rounded-lg border border-slate-700/50 custom-scrollbar">
+                                                                    <div className="overflow-x-auto rounded-lg border border-[#2a3042] custom-scrollbar">
                                                                         <table className="w-full text-left text-[9px] md:text-[10px]">
-                                                                            <thead className="bg-slate-800 text-slate-400 border-b border-slate-700/50 uppercase tracking-wider">
+                                                                            <thead className="bg-[#151928] text-slate-400 border-b border-[#2a3042] uppercase tracking-wider">
                                                                                 <tr>
                                                                                     <th className="py-2 px-3 font-bold">Resi & Tgl</th>
                                                                                     <th className="py-2 px-3 font-bold">Penerima & Kurir</th>
@@ -967,7 +1043,7 @@
                                                                                     <th className="py-2 px-3 font-bold text-center">Aksi / Bukti</th>
                                                                                 </tr>
                                                                             </thead>
-                                                                            <tbody className="divide-y divide-slate-700/30 bg-[#1e293b]/50">
+                                                                            <tbody className="divide-y divide-[#2a3042] bg-[#1e2533]">
                                                                                 {displayedPaket.map((pkg, pIdx) => {
                                                                                     const { hBarang, tagihan, oDasar, oTambahan } = getFinancials(pkg);
                                                                                     const isCair = String(pkg.statusPencairan).toLowerCase() === 'cair';
@@ -979,15 +1055,15 @@
                                                                                     if (displayTgl !== '-' && displayTgl.includes('T')) displayTgl = displayTgl.split('T')[0];
 
                                                                                     return (
-                                                                                        <tr key={pIdx} className="hover:bg-slate-700/30 transition-colors">
+                                                                                        <tr key={pIdx} className="hover:bg-[#2a3042] transition-colors">
                                                                                             <td className="py-2 px-3 whitespace-nowrap">
-                                                                                                <div className="text-[#e65c00] font-mono font-bold bg-orange-900/20 px-1.5 py-0.5 rounded border border-orange-800/30 inline-block">{pkg.packageId}</div>
+                                                                                                <div className="text-[#d9531e] font-mono font-bold bg-orange-900/20 px-1.5 py-0.5 rounded border border-orange-800/30 inline-block">{pkg.packageId}</div>
                                                                                                 <div className="text-slate-500 mt-1 text-[8px]"><i className="far fa-calendar-alt mr-1"></i>{displayTgl}</div>
                                                                                             </td>
                                                                                             <td className="py-2 px-3">
                                                                                                 <div className="text-slate-200 font-bold truncate max-w-[120px] md:max-w-[200px]" title={pkg.customerName}>{pkg.customerName}</div>
-                                                                                                <div className="text-slate-400 text-[8px] mt-0.5 truncate max-w-[120px] md:max-w-[200px]"><i className="fas fa-phone mr-1"></i>{pkg.customerPhone}</div>
-                                                                                                <div className="text-slate-500 text-[8px] mt-0.5 truncate max-w-[120px] md:max-w-[200px]"><i className="fas fa-motorcycle mr-1"></i>{displayKurir}</div>
+                                                                                                <div className="text-slate-400 text-[8px] mt-0.5"><i className="fas fa-phone mr-1"></i>{pkg.customerPhone}</div>
+                                                                                                <div className="text-slate-500 text-[8px] mt-0.5"><i className="fas fa-motorcycle mr-1"></i>{displayKurir}</div>
                                                                                             </td>
                                                                                             <td className="py-2 px-3 text-center whitespace-nowrap">
                                                                                                 <StatusBadgeAdmin status={pkg.status} />
@@ -996,9 +1072,8 @@
                                                                                                         {isCair ? 'TELAH CAIR' : 'BLM CAIR'}
                                                                                                     </div>
                                                                                                 )}
-                                                                                                {/* KETERANGAN STATUS JIKA CANCEL/PENDING */}
                                                                                                 {(isCancel || isPending) && (pkg.keterangan || pkg.keteranganStatus) && (
-                                                                                                    <div className="mt-1 w-full text-[8px] md:text-[9px] font-medium text-orange-300 break-words whitespace-normal bg-slate-900 p-1.5 rounded border border-slate-700 text-center leading-tight shadow-inner" title={pkg.keterangan || pkg.keteranganStatus}>
+                                                                                                    <div className="mt-1 w-full text-[8px] md:text-[9px] font-medium text-orange-300 break-words whitespace-normal bg-[#0b1120] p-1.5 rounded border border-[#2a3042] text-center leading-tight shadow-inner" title={pkg.keterangan || pkg.keteranganStatus}>
                                                                                                         Ket: {pkg.keterangan || pkg.keteranganStatus}
                                                                                                     </div>
                                                                                                 )}
@@ -1017,20 +1092,15 @@
                                                                                             <td className="py-2 px-3 text-center align-middle">
                                                                                                 <div className="flex flex-col items-center justify-center gap-1.5">
                                                                                                     {pkg.fotoBukti ? (
-                                                                                                        <div 
-                                                                                                            className="w-14 h-14 md:w-16 md:h-16 mx-auto rounded-md bg-slate-800 border border-slate-600 overflow-hidden cursor-pointer hover:opacity-80 transition-opacity shadow-sm" 
-                                                                                                            onClick={(e) => { e.stopPropagation(); setSelectedImage(getFotoUrl(pkg)); }}
-                                                                                                            title="Klik untuk perbesar"
-                                                                                                        >
+                                                                                                        <div className="w-14 h-14 md:w-16 md:h-16 mx-auto rounded-md bg-[#0b1120] border border-[#2a3042] overflow-hidden cursor-pointer hover:opacity-80 transition-opacity" onClick={(e) => { e.stopPropagation(); setSelectedImage(getFotoUrl(pkg)); }}>
                                                                                                             <img src={getFotoUrl(pkg)} className="w-full h-full object-cover" alt="Bukti" />
                                                                                                         </div>
                                                                                                     ) : (
-                                                                                                        <div className="w-14 h-14 md:w-16 md:h-16 mx-auto rounded-md bg-slate-800/50 border border-slate-700 border-dashed flex flex-col items-center justify-center text-slate-500" title="Tidak Ada Foto">
-                                                                                                            <i className="fas fa-image text-xs mb-1"></i>
-                                                                                                            <span className="text-[8px] font-bold">NO FOTO</span>
+                                                                                                        <div className="w-14 h-14 md:w-16 md:h-16 mx-auto rounded-md bg-[#0b1120] border border-[#2a3042] border-dashed flex flex-col items-center justify-center text-slate-500">
+                                                                                                            <i className="fas fa-image text-xs mb-1"></i><span className="text-[8px] font-bold">NO FOTO</span>
                                                                                                         </div>
                                                                                                     )}
-                                                                                                    <button onClick={(e) => { e.stopPropagation(); openEditModal(pkg); }} className="w-full max-w-[80px] py-1 rounded bg-blue-600/20 border border-blue-500/30 hover:bg-blue-600 hover:text-white text-blue-400 flex items-center justify-center transition-colors shadow-sm mt-1" title="Edit Paket">
+                                                                                                    <button onClick={(e) => { e.stopPropagation(); openEditModal(pkg); }} className="w-full max-w-[80px] py-1 rounded bg-blue-600/20 border border-blue-500/30 hover:bg-blue-600 hover:text-white text-blue-400 flex items-center justify-center transition-colors shadow-sm mt-1">
                                                                                                         <i className="fas fa-edit text-[10px] mr-1.5"></i> <span className="text-[10px] font-bold">Edit</span>
                                                                                                     </button>
                                                                                                 </div>
@@ -1053,13 +1123,13 @@
                             </div>
                         )}
 
+                        {/* VIEW KURIR */}
                         {activeTab === 'kurir' && (
-                            <div className="bg-[#1e293b] rounded-xl shadow-sm border border-slate-700 overflow-hidden animate-fade-in-down">
-                                <div className="p-3 md:p-4 border-b border-slate-700 bg-slate-800/50 flex justify-between items-center">
-                                    <h3 className="font-bold text-slate-200 text-xs md:text-sm">Rekapitulasi Uang Setoran Kurir <span className="text-[10px] text-slate-400 font-normal ml-2">(Klik baris untuk rincian bawaan)</span></h3>
+                            <div className="bg-[#1e2533] rounded-xl shadow-sm border border-[#2a3042] overflow-hidden">
+                                <div className="p-3 md:p-4 border-b border-[#2a3042] bg-[#151928] flex justify-between items-center">
+                                    <h3 className="font-bold text-slate-200 text-xs md:text-sm">Rekapitulasi Setoran Kurir <span className="text-[10px] text-slate-400 font-normal ml-2">(Klik baris untuk rincian)</span></h3>
                                 </div>
-                                
-                                <div className="overflow-x-auto scrollbar-hide">
+                                <div className="overflow-x-auto custom-scrollbar">
                                     <div className="min-w-[1050px] flex flex-col">
                                         {kurirReport.length === 0 ? (
                                             <div className="p-8 text-center text-slate-500">Tidak ada kinerja kurir di periode/status ini.</div>
@@ -1068,7 +1138,6 @@
                                                 {kurirReport.map((kur, idx) => {
                                                     const isExpanded = expandedKurirs.includes(kur.name);
                                                     const currentFilter = kurirFilters[kur.name] || 'semua';
-                                                    
                                                     const displayedPaket = kur.paketTerkait.filter(pkg => {
                                                         if (currentFilter === 'semua') return true;
                                                         let stat = String(pkg.status).toLowerCase().replace(' ', '_');
@@ -1077,17 +1146,14 @@
                                                     });
 
                                                     return (
-                                                        <div key={idx} className="flex flex-col border-b border-slate-700/50 hover:bg-slate-800/30 transition-colors">
-                                                            <div 
-                                                                className="flex items-center justify-between p-3 md:p-4 cursor-pointer"
-                                                                onClick={() => toggleKurir(kur.name)}
-                                                            >
+                                                        <div key={idx} className="flex flex-col border-b border-[#2a3042] hover:bg-[#151928] transition-colors">
+                                                            <div className="flex items-center justify-between p-3 md:p-4 cursor-pointer" onClick={() => toggleKurir(kur.name)}>
                                                                 <div className="flex flex-col gap-1 w-[200px] md:w-[300px] shrink-0">
                                                                     <div className="flex items-center gap-2.5">
-                                                                        <div className={`w-5 h-5 rounded flex items-center justify-center transition-transform ${isExpanded ? 'bg-blue-500 text-white rotate-180' : 'bg-slate-700 text-slate-400'}`}><i className="fas fa-chevron-down text-[10px]"></i></div>
+                                                                        <div className={`w-5 h-5 rounded flex items-center justify-center transition-transform ${isExpanded ? 'bg-blue-500 text-white rotate-180' : 'bg-[#2a3042] text-slate-400'}`}><i className="fas fa-chevron-down text-[10px]"></i></div>
                                                                         <i className="fas fa-motorcycle text-blue-400/80"></i>
                                                                         <span className="font-bold text-slate-200 uppercase truncate text-xs md:text-sm">{kur.name}</span>
-                                                                        <span className="text-[9px] bg-slate-700 text-slate-300 px-2 py-0.5 rounded shrink-0 font-bold">{kur.paketTerkait.length} Pkt</span>
+                                                                        <span className="text-[9px] bg-[#2a3042] text-slate-300 px-2 py-0.5 rounded shrink-0 font-bold">{kur.paketTerkait.length} Pkt</span>
                                                                     </div>
                                                                     <div className="flex gap-2 ml-7 mt-0.5">
                                                                         <span className="text-[9px] text-emerald-400 font-bold" title="Sukses"><i className="fas fa-check-circle mr-1"></i>{kur.totalSukses}</span>
@@ -1100,17 +1166,17 @@
                                                                     <div className="flex flex-col items-end justify-center min-w-[70px]"><span className="text-[8px] font-bold text-emerald-500/70 uppercase tracking-widest mb-0.5">UANG CASH</span><span className="text-xs md:text-sm font-black text-emerald-400">+{formatCurrency(kur.rincianCash)}</span></div>
                                                                     <div className="flex flex-col items-end justify-center min-w-[70px]" title="Hak ongkir tambahan kurir dari paket CASH (Langsung dikantongi)"><span className="text-[8px] font-bold text-orange-400/80 uppercase tracking-widest mb-0.5">SIMPAN (CASH)</span><span className="text-xs md:text-sm font-black text-orange-400">-{formatCurrency(kur.tambahanOngkirCash)}</span></div>
                                                                     <div className="flex flex-col items-end justify-center min-w-[70px]" title="Hak ongkir tambahan kurir dari paket TF (Dibayar kantor dengan memotong setoran)"><span className="text-[8px] font-bold text-purple-400/80 uppercase tracking-widest mb-0.5">POTONG (TF)</span><span className="text-xs md:text-sm font-black text-purple-400">-{formatCurrency(kur.tambahanOngkirTF)}</span></div>
-                                                                    <div className="flex flex-col items-end justify-center min-w-[80px] pl-2 border-l border-slate-700"><span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">WAJIB SETOR</span><span className={`text-[13px] md:text-[15px] font-black ${kur.setoran >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>{formatCurrency(kur.setoran)}</span></div>
+                                                                    <div className="flex flex-col items-end justify-center min-w-[80px] pl-2 border-l border-[#2a3042]"><span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">WAJIB SETOR</span><span className={`text-[13px] md:text-[15px] font-black ${kur.setoran >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>{formatCurrency(kur.setoran)}</span></div>
                                                                 </div>
                                                             </div>
                                                             {isExpanded && (
-                                                                <div className="p-3 md:p-4 bg-[#0f172a]/60 animate-fade-in-down border-t border-slate-700/50">
+                                                                <div className="p-3 md:p-4 bg-[#0b1120] border-t border-[#2a3042]">
                                                                     <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-3 gap-3">
                                                                         <h4 className="text-slate-400 font-bold text-[10px] uppercase tracking-widest flex items-center"><i className="fas fa-boxes mr-2"></i>Rincian Bawaan: {kur.name}</h4>
                                                                         <div className="flex flex-wrap gap-1.5">
                                                                             {[{id:'semua', label:'Semua'}, {id:'sukses', label:'Sukses'}, {id:'proses', label:'Proses'}, {id:'pending', label:'Pending'}, {id:'cancel', label:'Cancel'}].map(f => (
                                                                                 <button key={f.id} onClick={(e) => { e.stopPropagation(); setKurirFilters(prev => ({...prev, [kur.name]: f.id})); }}
-                                                                                    className={`px-2.5 py-1 rounded text-[9px] font-bold uppercase transition-colors border ${currentFilter === f.id ? 'bg-blue-500 text-white border-blue-500' : 'bg-slate-800 text-slate-400 border-slate-600 hover:bg-slate-700'}`}>
+                                                                                    className={`px-2.5 py-1 rounded text-[9px] font-bold uppercase transition-colors border ${currentFilter === f.id ? 'bg-blue-500 text-white border-blue-500' : 'bg-[#1e2533] text-slate-400 border-[#2a3042] hover:bg-[#2a3042]'}`}>
                                                                                     {f.label}
                                                                                 </button>
                                                                             ))}
@@ -1118,11 +1184,11 @@
                                                                     </div>
                                                                     
                                                                     {displayedPaket.length === 0 ? (
-                                                                        <div className="text-center py-4 text-slate-500 text-xs italic">Tidak ada paket bawaan dengan filter tersebut.</div>
+                                                                        <div className="text-center py-4 text-slate-500 text-xs italic">Tidak ada paket bawaan.</div>
                                                                     ) : (
-                                                                        <div className="overflow-x-auto rounded-lg border border-slate-700/50 custom-scrollbar">
+                                                                        <div className="overflow-x-auto rounded-lg border border-[#2a3042] custom-scrollbar">
                                                                             <table className="w-full text-left text-[9px] md:text-[10px]">
-                                                                                <thead className="bg-slate-800 text-slate-400 border-b border-slate-700/50 uppercase tracking-wider">
+                                                                                <thead className="bg-[#151928] text-slate-400 border-b border-[#2a3042] uppercase tracking-wider">
                                                                                     <tr>
                                                                                         <th className="py-2 px-3 font-bold">Resi & Tgl</th>
                                                                                         <th className="py-2 px-3 font-bold">Olshop & Penerima</th>
@@ -1133,7 +1199,7 @@
                                                                                         <th className="py-2 px-3 font-bold text-center">Aksi / Bukti</th>
                                                                                     </tr>
                                                                                 </thead>
-                                                                                <tbody className="divide-y divide-slate-700/30 bg-[#1e293b]/50">
+                                                                                <tbody className="divide-y divide-[#2a3042] bg-[#1e2533]">
                                                                                     {displayedPaket.map((pkg, pIdx) => {
                                                                                         const { hBarang, tagihan, oDasar, oTambahan } = getFinancials(pkg);
                                                                                         const isSukses = String(pkg.status).toLowerCase() === 'sukses';
@@ -1143,21 +1209,20 @@
                                                                                         if (displayTgl !== '-' && displayTgl.includes('T')) displayTgl = displayTgl.split('T')[0];
 
                                                                                         return (
-                                                                                            <tr key={pIdx} className="hover:bg-slate-700/30 transition-colors">
+                                                                                            <tr key={pIdx} className="hover:bg-[#2a3042] transition-colors">
                                                                                                 <td className="py-2 px-3 whitespace-nowrap">
-                                                                                                    <div className="text-[#e65c00] font-mono font-bold bg-orange-900/20 px-1.5 py-0.5 rounded border border-orange-800/30 inline-block">{pkg.packageId}</div>
+                                                                                                    <div className="text-[#d9531e] font-mono font-bold bg-orange-900/20 px-1.5 py-0.5 rounded border border-orange-800/30 inline-block">{pkg.packageId}</div>
                                                                                                     <div className="text-slate-500 mt-1 text-[8px]"><i className="far fa-calendar-alt mr-1"></i>{displayTgl}</div>
                                                                                                 </td>
                                                                                                 <td className="py-2 px-3">
-                                                                                                    <div className="text-slate-400 text-[8px] mb-0.5 truncate max-w-[120px] md:max-w-[200px]"><i className="fas fa-store mr-1"></i>{pkg.olshopName}</div>
+                                                                                                    <div className="text-slate-400 text-[8px] mb-0.5"><i className="fas fa-store mr-1"></i>{pkg.olshopName}</div>
                                                                                                     <div className="text-slate-200 font-bold truncate max-w-[120px] md:max-w-[200px]" title={pkg.customerName}>{pkg.customerName}</div>
-                                                                                                    <div className="text-slate-500 text-[8px] mt-0.5 truncate max-w-[120px] md:max-w-[200px]"><i className="fas fa-map-marker-alt mr-1"></i>{pkg.address || '-'}</div>
+                                                                                                    <div className="text-slate-500 text-[8px] mt-0.5"><i className="fas fa-map-marker-alt mr-1"></i>{pkg.address || '-'}</div>
                                                                                                 </td>
                                                                                                 <td className="py-2 px-3 text-center whitespace-nowrap">
                                                                                                     <StatusBadgeAdmin status={pkg.status} />
-                                                                                                    {/* KETERANGAN STATUS JIKA CANCEL/PENDING */}
                                                                                                     {(isCancel || isPending) && (pkg.keterangan || pkg.keteranganStatus) && (
-                                                                                                        <div className="mt-1 w-full text-[8px] md:text-[9px] font-medium text-orange-300 break-words whitespace-normal bg-slate-900 p-1.5 rounded border border-slate-700 text-center leading-tight shadow-inner" title={pkg.keterangan || pkg.keteranganStatus}>
+                                                                                                        <div className="mt-1 w-full text-[8px] md:text-[9px] font-medium text-orange-300 break-words whitespace-normal bg-[#0b1120] p-1.5 rounded border border-[#2a3042] text-center leading-tight shadow-inner" title={pkg.keterangan || pkg.keteranganStatus}>
                                                                                                             Ket: {pkg.keterangan || pkg.keteranganStatus}
                                                                                                         </div>
                                                                                                     )}
@@ -1176,20 +1241,15 @@
                                                                                                 <td className="py-2 px-3 text-center align-middle">
                                                                                                     <div className="flex flex-col items-center justify-center gap-1.5">
                                                                                                         {pkg.fotoBukti ? (
-                                                                                                            <div 
-                                                                                                                className="w-14 h-14 md:w-16 md:h-16 mx-auto rounded-md bg-slate-800 border border-slate-600 overflow-hidden cursor-pointer hover:opacity-80 transition-opacity shadow-sm" 
-                                                                                                                onClick={(e) => { e.stopPropagation(); setSelectedImage(getFotoUrl(pkg)); }}
-                                                                                                                title="Klik untuk perbesar"
-                                                                                                            >
+                                                                                                            <div className="w-14 h-14 md:w-16 md:h-16 mx-auto rounded-md bg-[#0b1120] border border-[#2a3042] overflow-hidden cursor-pointer hover:opacity-80 transition-opacity" onClick={(e) => { e.stopPropagation(); setSelectedImage(getFotoUrl(pkg)); }}>
                                                                                                                 <img src={getFotoUrl(pkg)} className="w-full h-full object-cover" alt="Bukti" />
                                                                                                             </div>
                                                                                                         ) : (
-                                                                                                            <div className="w-14 h-14 md:w-16 md:h-16 mx-auto rounded-md bg-slate-800/50 border border-slate-700 border-dashed flex flex-col items-center justify-center text-slate-500" title="Tidak Ada Foto">
-                                                                                                                <i className="fas fa-image text-xs mb-1"></i>
-                                                                                                                <span className="text-[8px] font-bold">NO FOTO</span>
+                                                                                                            <div className="w-14 h-14 md:w-16 md:h-16 mx-auto rounded-md bg-[#0b1120] border border-[#2a3042] border-dashed flex flex-col items-center justify-center text-slate-500">
+                                                                                                                <i className="fas fa-image text-xs mb-1"></i><span className="text-[8px] font-bold">NO FOTO</span>
                                                                                                             </div>
                                                                                                         )}
-                                                                                                        <button onClick={(e) => { e.stopPropagation(); openEditModal(pkg); }} className="w-full max-w-[80px] py-1 rounded bg-blue-600/20 border border-blue-500/30 hover:bg-blue-600 hover:text-white text-blue-400 flex items-center justify-center transition-colors shadow-sm mt-1" title="Edit Paket">
+                                                                                                        <button onClick={(e) => { e.stopPropagation(); openEditModal(pkg); }} className="w-full max-w-[80px] py-1 rounded bg-blue-600/20 border border-blue-500/30 hover:bg-blue-600 hover:text-white text-blue-400 flex items-center justify-center transition-colors shadow-sm mt-1">
                                                                                                             <i className="fas fa-edit text-[10px] mr-1.5"></i> <span className="text-[10px] font-bold">Edit</span>
                                                                                                         </button>
                                                                                                     </div>
@@ -1206,20 +1266,16 @@
                                                         </div>
                                                     );
                                                 })}
-                                                
-                                                {/* BARIS AKUMULASI TOTAL KESELURUHAN LAPORAN KURIR */}
-                                                <div className="bg-[#151928] border-t-2 border-blue-500/50 p-4 mt-2 rounded-b-xl shadow-lg flex flex-col md:flex-row justify-between items-center gap-4 animate-fade-in-down">
+                                                <div className="bg-[#151928] border-t-2 border-blue-500/50 p-4 mt-2 rounded-b-xl shadow-lg flex flex-col md:flex-row justify-between items-center gap-4">
                                                     <div className="flex items-center gap-3">
-                                                        <div className="w-10 h-10 rounded-full bg-blue-900/50 border border-blue-500/50 flex items-center justify-center text-blue-400 shadow-[0_0_15px_rgba(59,130,246,0.3)]">
-                                                            <i className="fas fa-sigma text-xl"></i>
-                                                        </div>
+                                                        <div className="w-10 h-10 rounded-full bg-blue-900/50 border border-blue-500/50 flex items-center justify-center text-blue-400 shadow-[0_0_15px_rgba(59,130,246,0.3)]"><i className="fas fa-sigma text-xl"></i></div>
                                                         <div>
                                                             <h3 className="font-black text-white text-sm md:text-base uppercase tracking-widest">AKUMULASI KESELURUHAN</h3>
                                                             <p className="text-[10px] text-blue-400 font-bold">Total dari {kurirReport.length} Kurir Aktif</p>
                                                         </div>
                                                     </div>
                                                     <div className="flex gap-4 md:gap-8 flex-wrap justify-center">
-                                                        <div className="flex flex-col items-center justify-center bg-slate-800/50 px-4 py-2 rounded-lg border border-slate-700/50">
+                                                        <div className="flex flex-col items-center justify-center bg-[#1e2533] px-4 py-2 rounded-lg border border-[#2a3042]">
                                                             <span className="text-[9px] font-bold text-slate-400 uppercase mb-1"><i className="fas fa-boxes text-slate-500 mr-1"></i> Total Pkt Sukses</span>
                                                             <span className="text-base md:text-lg font-black text-white">{globalSummary.totalPaketSukses} <span className="text-[10px] text-slate-500 font-normal">Pkt</span></span>
                                                         </div>
@@ -1235,36 +1291,83 @@
                                 </div>
                             </div>
                         )}
+                    </div>
+                );
+            }
 
+            return (
+                <div className="h-screen bg-app-dark font-sans w-full mx-auto relative flex flex-col">
+                    <DashboardHeader />
+
+                    <div className="flex flex-1 overflow-hidden">
+                        {/* Sidebar only visible in Web mode and larger screens */}
+                        {layoutMode === 'web' && (
+                            <div className="hidden md:flex">
+                                <WebSidebar />
+                            </div>
+                        )}
+
+                        <div className="flex-1 overflow-y-auto custom-scrollbar flex flex-col p-4 w-full h-full relative">
+                            {/* Android Mode specific layout matches the image closely */}
+                            {layoutMode === 'android' ? (
+                                <div className="max-w-xl mx-auto w-full space-y-4 pb-20">
+                                    <FilterSection />
+                                    <MetricCards />
+                                    <MenuGrid />
+                                    {renderContent()}
+                                </div>
+                            ) : (
+                                // Web Mode layout (wider, can use side-by-side)
+                                <div className="max-w-7xl mx-auto w-full space-y-6">
+                                    {/* On smaller screens in web mode, show top navigation tabs or a simplified sidebar */}
+                                    <div className="md:hidden flex overflow-x-auto space-x-2 border-b border-[#2a3042] pb-2 mb-4 scrollbar-hide">
+                                        <button onClick={() => setActiveTab('olshop')} className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap ${activeTab === 'olshop' ? 'bg-[#d9531e] text-white' : 'bg-[#1e2533] text-slate-400'}`}>Olshop</button>
+                                        <button onClick={() => setActiveTab('kurir')} className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap ${activeTab === 'kurir' ? 'bg-[#3b82f6] text-white' : 'bg-[#1e2533] text-slate-400'}`}>Kurir</button>
+                                        <button onClick={() => setActiveTab('profit')} className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap ${activeTab === 'profit' ? 'bg-[#10b981] text-white' : 'bg-[#1e2533] text-slate-400'}`}>Profit</button>
+                                        <button onClick={() => setActiveTab('gaji')} className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap ${activeTab === 'gaji' ? 'bg-[#eab308] text-white' : 'bg-[#1e2533] text-slate-400'}`}>Gaji Ops</button>
+                                    </div>
+                                    
+                                    <div className="flex flex-col lg:flex-row gap-6">
+                                        <div className="flex-1 space-y-6">
+                                            <MetricCards />
+                                            {renderContent()}
+                                        </div>
+                                        <div className="lg:w-80 shrink-0 order-first lg:order-last">
+                                            <FilterSection />
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
                     </div>
 
-                    {/* MODAL KONFIRMASI CAIRKAN */}
+                    {/* */}
                     {isCairkanModalOpen && selectedOlshopToCairkan && (
                         <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in-down">
-                            <div className="bg-[#1e293b] rounded-2xl border border-slate-700 shadow-2xl w-full max-w-md overflow-hidden">
-                                <div className="p-5 border-b border-slate-700 bg-slate-800 flex justify-between items-center">
+                            <div className="bg-[#1e2533] rounded-2xl border border-[#2a3042] shadow-2xl w-full max-w-md overflow-hidden">
+                                <div className="p-5 border-b border-[#2a3042] bg-[#151928] flex justify-between items-center">
                                     <h3 className="font-bold text-white text-lg"><i className="fas fa-hand-holding-usd text-emerald-500 mr-2"></i> Konfirmasi Pencairan</h3>
                                     <button onClick={() => setIsCairkanModalOpen(false)} className="text-slate-400 hover:text-white transition-colors"><i className="fas fa-times"></i></button>
                                 </div>
                                 <div className="p-5">
                                     <p className="text-slate-300 text-sm mb-4">Anda akan memproses pencairan dana untuk Olshop berikut:</p>
-                                    <div className="bg-slate-900 rounded-xl p-4 border border-slate-700 mb-5">
+                                    <div className="bg-[#0b1120] rounded-xl p-4 border border-[#2a3042] mb-5">
                                         <div className="flex justify-between items-center mb-2">
                                             <span className="text-slate-400 text-xs font-bold uppercase tracking-wider">Nama Olshop</span>
                                             <span className="text-white font-bold">{selectedOlshopToCairkan.name}</span>
                                         </div>
                                         <div className="flex justify-between items-center mb-2">
                                             <span className="text-slate-400 text-xs font-bold uppercase tracking-wider">Jumlah Paket</span>
-                                            <span className="text-white font-bold bg-slate-700 px-2 py-0.5 rounded text-xs">{selectedOlshopToCairkan.paketBelumCairIds.length} Pkt</span>
+                                            <span className="text-white font-bold bg-[#1e2533] px-2 py-0.5 rounded text-xs border border-[#2a3042]">{selectedOlshopToCairkan.paketBelumCairIds.length} Pkt</span>
                                         </div>
-                                        <div className="flex justify-between items-center border-t border-slate-700 pt-3 mt-3">
+                                        <div className="flex justify-between items-center border-t border-[#2a3042] pt-3 mt-3">
                                             <span className="text-emerald-500/70 text-xs font-bold uppercase tracking-wider">Total Dana Cair</span>
                                             <span className="text-emerald-400 font-black text-lg">{formatCurrency(selectedOlshopToCairkan.nominalBelumCair)}</span>
                                         </div>
                                     </div>
 
                                     <div className="flex gap-3">
-                                        <button onClick={() => setIsCairkanModalOpen(false)} disabled={isProcessingCair} className="flex-1 py-2.5 rounded-xl font-bold text-slate-300 bg-slate-700 hover:bg-slate-600 transition-colors">Batal</button>
+                                        <button onClick={() => setIsCairkanModalOpen(false)} disabled={isProcessingCair} className="flex-1 py-2.5 rounded-xl font-bold text-slate-300 bg-[#2a3042] hover:bg-[#374151] transition-colors">Batal</button>
                                         <button onClick={handleProsesCairkan} disabled={isProcessingCair} className="flex-1 py-2.5 rounded-xl font-bold text-white bg-emerald-600 hover:bg-emerald-500 transition-colors flex justify-center items-center shadow-lg shadow-emerald-900/50">
                                             {isProcessingCair ? <><i className="fas fa-spinner fa-spin mr-2"></i> Memproses...</> : 'Ya, Cairkan Sekarang'}
                                         </button>
@@ -1274,77 +1377,49 @@
                         </div>
                     )}
 
-                    {/* MODAL EDIT DATA PAKET */}
                     {isEditModalOpen && (
                         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in-down">
-                            <div className="bg-[#1e293b] rounded-2xl border border-slate-700 shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[95vh]">
-                                <div className="p-4 md:p-5 border-b border-slate-700 bg-slate-800 flex justify-between items-center shrink-0">
+                            <div className="bg-[#1e2533] rounded-2xl border border-[#2a3042] shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[95vh]">
+                                <div className="p-4 md:p-5 border-b border-[#2a3042] bg-[#151928] flex justify-between items-center shrink-0">
                                     <h3 className="font-bold text-white flex items-center"><i className="fas fa-edit text-blue-500 mr-2"></i> Edit Data Paket</h3>
                                     <button onClick={() => setIsEditModalOpen(false)} className="text-slate-400 hover:text-white transition-colors"><i className="fas fa-times text-xl"></i></button>
                                 </div>
                                 
                                 <form onSubmit={handleEditSubmit} className="p-4 md:p-5 space-y-4 overflow-y-auto custom-scrollbar flex-1">
-                                    <div className="bg-slate-900 p-3 rounded-lg border border-slate-700 text-center mb-2">
+                                    <div className="bg-[#0b1120] p-3 rounded-lg border border-[#2a3042] text-center mb-2">
                                         <span className="text-xs text-slate-400 font-bold uppercase tracking-widest">Resi Pengiriman</span>
                                         <h2 className="text-lg font-black text-blue-400 font-mono tracking-widest">{editModal.packageId}</h2>
                                     </div>
                                     
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        {/* NAMA OLSHOP */}
                                         <div className="flex flex-col">
                                             <label className="text-[10px] text-slate-400 font-bold uppercase mb-1">Nama Toko (Olshop)</label>
-                                            <select 
-                                                value={editModal.olshopName}
-                                                onChange={(e) => setEditModal({...editModal, olshopName: e.target.value})}
-                                                className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white font-bold outline-none focus:border-blue-500 cursor-pointer"
-                                            >
+                                            <select value={editModal.olshopName} onChange={(e) => setEditModal({...editModal, olshopName: e.target.value})} className="bg-[#0b1120] border border-[#2a3042] rounded-lg px-3 py-2 text-sm text-white font-bold outline-none focus:border-blue-500 cursor-pointer">
                                                 <option value="">-- Pilih Olshop --</option>
-                                                {!masterOlshops.some(o => o.nama === editModal.olshopName) && editModal.olshopName && (
-                                                    <option value={editModal.olshopName}>{editModal.olshopName}</option>
-                                                )}
+                                                {!masterOlshops.some(o => o.nama === editModal.olshopName) && editModal.olshopName && <option value={editModal.olshopName}>{editModal.olshopName}</option>}
                                                 {masterOlshops.map((o, i) => <option key={i} value={o.nama}>{o.nama}</option>)}
                                             </select>
                                         </div>
-
-                                        {/* KURIR PENGANTAR */}
                                         <div className="flex flex-col">
                                             <label className="text-[10px] text-slate-400 font-bold uppercase mb-1">Email / ID Kurir</label>
-                                            <select 
-                                                value={editModal.kurirId}
-                                                onChange={(e) => setEditModal({...editModal, kurirId: e.target.value})}
-                                                className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white font-bold outline-none focus:border-blue-500 cursor-pointer"
-                                            >
+                                            <select value={editModal.kurirId} onChange={(e) => setEditModal({...editModal, kurirId: e.target.value})} className="bg-[#0b1120] border border-[#2a3042] rounded-lg px-3 py-2 text-sm text-white font-bold outline-none focus:border-blue-500 cursor-pointer">
                                                 <option value="">-- Pilih Kurir --</option>
-                                                {!masterKurirs.some(k => k.id === editModal.kurirId) && editModal.kurirId && (
-                                                    <option value={editModal.kurirId}>{editModal.kurirId}</option>
-                                                )}
+                                                {!masterKurirs.some(k => k.id === editModal.kurirId) && editModal.kurirId && <option value={editModal.kurirId}>{editModal.kurirId}</option>}
                                                 {masterKurirs.map((k, i) => <option key={i} value={k.id}>{k.nama}</option>)}
                                             </select>
                                         </div>
-
-                                        {/* STATUS PENGIRIMAN */}
                                         <div className="flex flex-col">
                                             <label className="text-[10px] text-slate-400 font-bold uppercase mb-1">Status Pengiriman</label>
-                                            <select 
-                                                value={editModal.status}
-                                                onChange={(e) => setEditModal({...editModal, status: e.target.value})}
-                                                className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white font-bold outline-none focus:border-blue-500 cursor-pointer"
-                                            >
+                                            <select value={editModal.status} onChange={(e) => setEditModal({...editModal, status: e.target.value})} className="bg-[#0b1120] border border-[#2a3042] rounded-lg px-3 py-2 text-sm text-white font-bold outline-none focus:border-blue-500 cursor-pointer">
                                                 <option value="SUKSES">Sukses</option>
                                                 <option value="SIAP_ANTAR">Proses (Siap Antar)</option>
                                                 <option value="PENDING">Pending</option>
                                                 <option value="CANCEL">Cancel / Batal</option>
                                             </select>
                                         </div>
-
-                                        {/* METODE BAYAR */}
                                         <div className="flex flex-col">
                                             <label className="text-[10px] text-slate-400 font-bold uppercase mb-1">Metode Bayar</label>
-                                            <select 
-                                                value={editModal.metodeBayar}
-                                                onChange={(e) => setEditModal({...editModal, metodeBayar: e.target.value})}
-                                                className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white font-bold outline-none focus:border-blue-500 cursor-pointer"
-                                            >
+                                            <select value={editModal.metodeBayar} onChange={(e) => setEditModal({...editModal, metodeBayar: e.target.value})} className="bg-[#0b1120] border border-[#2a3042] rounded-lg px-3 py-2 text-sm text-white font-bold outline-none focus:border-blue-500 cursor-pointer">
                                                 <option value="">-- KOSONG / BELUM ADA --</option>
                                                 <option value="CASH">CASH</option>
                                                 <option value="TF OLSHOP">TF OLSHOP</option>
@@ -1352,55 +1427,26 @@
                                                 <option value="COD">COD</option>
                                             </select>
                                         </div>
-
-                                        {/* HARGA BARANG */}
                                         <div className="flex flex-col">
                                             <label className="text-[10px] text-slate-400 font-bold uppercase mb-1">Harga Barang</label>
-                                            <input 
-                                                type="number"
-                                                value={editModal.hargaPaket}
-                                                onChange={(e) => setEditModal({...editModal, hargaPaket: e.target.value})}
-                                                className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white font-bold outline-none focus:border-blue-500"
-                                            />
+                                            <input type="number" value={editModal.hargaPaket} onChange={(e) => setEditModal({...editModal, hargaPaket: e.target.value})} className="bg-[#0b1120] border border-[#2a3042] rounded-lg px-3 py-2 text-sm text-white font-bold outline-none focus:border-blue-500" />
                                         </div>
-
-                                        {/* KODE ONGKIR TRF */}
                                         <div className="flex flex-col">
                                             <label className="text-[10px] text-slate-400 font-bold uppercase mb-1">Kode Ongkir (TRF/ZONA)</label>
-                                            <select 
-                                                value={editModal.ongkirKode}
-                                                onChange={(e) => handleOngkirKodeChange(e.target.value)}
-                                                className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white font-bold outline-none focus:border-blue-500 cursor-pointer"
-                                            >
+                                            <select value={editModal.ongkirKode} onChange={(e) => handleOngkirKodeChange(e.target.value)} className="bg-[#0b1120] border border-[#2a3042] rounded-lg px-3 py-2 text-sm text-white font-bold outline-none focus:border-blue-500 cursor-pointer">
                                                 <option value="">-- Pilih TRF / ZONA --</option>
-                                                {!masterZonas.some(z => z.id === editModal.ongkirKode) && editModal.ongkirKode && (
-                                                    <option value={editModal.ongkirKode}>{editModal.ongkirKode}</option>
-                                                )}
+                                                {!masterZonas.some(z => z.id === editModal.ongkirKode) && editModal.ongkirKode && <option value={editModal.ongkirKode}>{editModal.ongkirKode}</option>}
                                                 {masterZonas.map((z, i) => <option key={i} value={z.id}>{z.id} - {z.nama} (Rp {formatCurrency(z.harga)})</option>)}
                                             </select>
                                             {editModal.ongkirDasar > 0 && <span className="text-[9px] text-emerald-400 mt-1 font-bold">Terbaca: Rp {formatCurrency(editModal.ongkirDasar)}</span>}
                                         </div>
-
-                                        {/* TAMBAHAN ONGKIR */}
                                         <div className="flex flex-col">
                                             <label className="text-[10px] text-slate-400 font-bold uppercase mb-1">Tambahan Ongkir (Vol)</label>
-                                            <input 
-                                                type="number"
-                                                value={editModal.tambahanOngkir}
-                                                onChange={(e) => setEditModal({...editModal, tambahanOngkir: e.target.value})}
-                                                className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white font-bold outline-none focus:border-blue-500"
-                                            />
+                                            <input type="number" value={editModal.tambahanOngkir} onChange={(e) => setEditModal({...editModal, tambahanOngkir: e.target.value})} className="bg-[#0b1120] border border-[#2a3042] rounded-lg px-3 py-2 text-sm text-white font-bold outline-none focus:border-blue-500" />
                                         </div>
-
-                                        {/* TANGGAL */}
                                         <div className="flex flex-col">
                                             <label className="text-[10px] text-slate-400 font-bold uppercase mb-1">Ubah Tanggal</label>
-                                            <input 
-                                                type="date"
-                                                value={editModal.tanggal}
-                                                onChange={(e) => setEditModal({...editModal, tanggal: e.target.value})}
-                                                className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white font-bold outline-none focus:border-blue-500"
-                                            />
+                                            <input type="date" value={editModal.tanggal} onChange={(e) => setEditModal({...editModal, tanggal: e.target.value})} className="bg-[#0b1120] border border-[#2a3042] rounded-lg px-3 py-2 text-sm text-white font-bold outline-none focus:border-blue-500" />
                                         </div>
                                     </div>
 
@@ -1409,8 +1455,8 @@
                                         <h3 className="text-2xl font-black text-white">{formatCurrency(Number(editModal.hargaPaket) + Number(editModal.ongkirDasar) + Number(editModal.tambahanOngkir))}</h3>
                                     </div>
 
-                                    <div className="flex gap-3 pt-4 border-t border-slate-700 shrink-0">
-                                        <button type="button" onClick={() => setIsEditModalOpen(false)} disabled={isProcessingEdit} className="flex-1 py-3 rounded-xl font-bold text-slate-300 bg-slate-700 hover:bg-slate-600 transition-colors">Batal</button>
+                                    <div className="flex gap-3 pt-4 border-t border-[#2a3042] shrink-0">
+                                        <button type="button" onClick={() => setIsEditModalOpen(false)} disabled={isProcessingEdit} className="flex-1 py-3 rounded-xl font-bold text-slate-300 bg-[#2a3042] hover:bg-[#374151] transition-colors">Batal</button>
                                         <button type="submit" disabled={isProcessingEdit} className="flex-1 py-3 rounded-xl font-bold text-white bg-blue-600 hover:bg-blue-500 transition-colors flex justify-center items-center shadow-lg shadow-blue-900/50">
                                             {isProcessingEdit ? <><i className="fas fa-spinner fa-spin mr-2"></i> Menyimpan...</> : <><i className="fas fa-save mr-2"></i> Simpan Edit</>}
                                         </button>
@@ -1420,20 +1466,12 @@
                         </div>
                     )}
 
-                    {/* MODAL FOTO MEMBESAR */}
                     {selectedImage && (
-                        <div 
-                            className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/90 backdrop-blur-sm p-4 transition-opacity"
-                            onClick={() => setSelectedImage(null)}
-                        >
+                        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/90 backdrop-blur-sm p-4 transition-opacity" onClick={() => setSelectedImage(null)}>
                             <div className="relative w-full max-w-lg md:max-w-2xl flex flex-col items-center transform transition-all scale-100" onClick={(e) => e.stopPropagation()}>
-                                <button onClick={() => setSelectedImage(null)} className="absolute -top-12 right-0 text-white bg-red-500/80 hover:bg-red-500 w-10 h-10 rounded-full flex items-center justify-center transition-colors shadow-lg border border-white/20">
-                                    <i className="fas fa-times text-xl"></i>
-                                </button>
+                                <button onClick={() => setSelectedImage(null)} className="absolute -top-12 right-0 text-white bg-red-500/80 hover:bg-red-500 w-10 h-10 rounded-full flex items-center justify-center transition-colors shadow-lg border border-white/20"><i className="fas fa-times text-xl"></i></button>
                                 <img src={selectedImage} alt="Foto Paket Membesar" className="w-full max-h-[80vh] object-contain rounded-xl shadow-2xl border-4 border-white/10 bg-black/50" />
-                                <p className="text-white font-black mt-4 tracking-widest text-sm uppercase flex items-center bg-black/50 px-4 py-2 rounded-full border border-white/10">
-                                    <i className="fas fa-camera mr-2 text-blue-400"></i> FOTO PAKET
-                                </p>
+                                <p className="text-white font-black mt-4 tracking-widest text-sm uppercase flex items-center bg-black/50 px-4 py-2 rounded-full border border-white/10"><i className="fas fa-camera mr-2 text-blue-400"></i> FOTO PAKET</p>
                             </div>
                         </div>
                     )}
